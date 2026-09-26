@@ -185,7 +185,8 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 		wp_presence_admin_bar_node( $bar );
 
 		foreach ( $bar->get_nodes() as $node ) {
-			if ( ! empty( $node->href ) ) {
+			// Groups and their headers are structure, not controls.
+			if ( ! empty( $node->href ) || ! empty( $node->group ) || 'presence-bar-group-header' === ( $node->meta['class'] ?? '' ) ) {
 				continue;
 			}
 
@@ -231,8 +232,8 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 	public function test_users_on_the_same_admin_page_are_grouped_here() {
 		$this->view_admin_page( 'upload.php', 'upload' );
 
-		$here = get_userdata( $this->put_user_on_screen( 'upload' ) );
-		$this->put_user_on_screen( 'edit-comments' );
+		$here      = get_userdata( $this->put_user_on_screen( 'upload' ) );
+		$elsewhere = $this->put_user_on_screen( 'edit-comments' );
 
 		wp_set_current_user( self::$editor_id );
 		$nodes = $this->render_nodes();
@@ -240,9 +241,12 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 		$this->assertArrayHasKey( 'presence-group-here', $nodes );
 		$this->assertArrayHasKey( 'presence-group-elsewhere', $nodes );
 		$this->assertArrayHasKey( 'presence-user-' . $here->ID, $nodes );
-		// The avatar stack is built from the people on this page, you included.
+		// Only people on this page wear their color.
+		$this->assertStringContainsString( 'outline-color:', $nodes[ 'presence-user-' . $here->ID ]->title );
+		$this->assertStringNotContainsString( 'outline-color:', $nodes[ 'presence-user-' . $elsewhere ]->title );
+		// The faces are the others on this page; you are already in My Account.
 		$this->assertStringContainsString( 'alt="' . esc_attr( $here->display_name ) . '"', $nodes['presence-online']->title );
-		$this->assertStringContainsString(
+		$this->assertStringNotContainsString(
 			'alt="' . esc_attr( get_userdata( self::$editor_id )->display_name ) . '"',
 			$nodes['presence-online']->title
 		);
@@ -327,7 +331,7 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 	 * Both groups are capped so a busy site cannot grow the dropdown past the
 	 * height of the screen.
 	 */
-	public function test_each_group_is_capped_at_ten_with_a_count_for_the_rest() {
+	public function test_each_group_is_capped_at_ten() {
 		$this->view_admin_page( 'upload.php', 'upload' );
 
 		for ( $i = 0; $i < 11; $i++ ) {
@@ -338,10 +342,10 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 		wp_set_current_user( self::$editor_id );
 		$nodes = $this->render_nodes();
 
-		$this->assertStringContainsString( '+1 more', $nodes['presence-here-overflow']->title );
-		$this->assertStringContainsString( '+1 more', $nodes['presence-elsewhere-overflow']->title );
-		// The "elsewhere" overflow is the one that can be acted on.
-		$this->assertSame( admin_url( 'users.php?presence_status=online' ), $nodes['presence-elsewhere-overflow']->href );
+		$rows = array_count_values( wp_list_pluck( array_filter( $nodes, fn( $n ) => 0 === strpos( $n->id, 'presence-user-' ) ), 'parent' ) );
+
+		$this->assertSame( array( 'presence-here' => 10, 'presence-elsewhere' => 10 ), $rows );
+		$this->assertSame( admin_url( 'users.php?presence_status=online' ), $nodes['presence-view-all']->href );
 	}
 
 	/**

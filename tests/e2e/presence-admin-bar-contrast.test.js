@@ -98,7 +98,6 @@ test.describe.serial( 'Presence admin bar contrast', () => {
 
 		const text = [
 			page.locator( '.presence-bar-count' ).first(),
-			page.locator( '.presence-bar-you' ).first(),
 			page.locator( '.presence-bar-screen' ).first(),
 			page.locator( '.presence-bar-group-label' ).first(),
 		];
