@@ -276,7 +276,7 @@ function wp_presence_admin_bar_node( $wp_admin_bar ) {
 			'parent' => 'presence-actions',
 			'id'     => 'presence-view-all',
 			'title'  => __( 'View online users', 'presence-api' ),
-			'href'   => admin_url( 'users.php?presence_status=online' ),
+			'href'   => wp_nonce_url( admin_url( 'users.php?presence_status=online' ), 'presence_online_filter' ),
 		)
 	);
 }

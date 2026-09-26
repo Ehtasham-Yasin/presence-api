@@ -345,7 +345,7 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 		$rows = array_count_values( wp_list_pluck( array_filter( $nodes, fn( $n ) => 0 === strpos( $n->id, 'presence-user-' ) ), 'parent' ) );
 
 		$this->assertSame( array( 'presence-here' => 10, 'presence-elsewhere' => 10 ), $rows );
-		$this->assertSame( admin_url( 'users.php?presence_status=online' ), $nodes['presence-view-all']->href );
+		$this->assertSame( wp_nonce_url( admin_url( 'users.php?presence_status=online' ), 'presence_online_filter' ), $nodes['presence-view-all']->href );
 	}
 
 	/**
