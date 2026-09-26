@@ -322,8 +322,8 @@ function wp_presence_admin_bar_assets() {
 		.admin-color-light #wpadminbar #wp-admin-bar-presence-online .presence-bar-group-header > .ab-item { color: #50575e !important; }
 	';
 
-	// Your color rings your own My Account face, only while someone shares this page with you.
-	$css .= '#wpadminbar:has(#wp-admin-bar-presence-here) #wp-admin-bar-my-account.with-avatar > .ab-item img { outline: 2px solid ' . wp_presence_avatar_border_color( get_current_user_id() ) . '; outline-offset: 1px; }';
+	// You wear the admin theme color, as in the block editor, so your ring never matches anyone on the page.
+	$css .= '#wpadminbar:has(#wp-admin-bar-presence-here) #wp-admin-bar-my-account.with-avatar > .ab-item img { outline: 2px solid var(--wp-admin-theme-color, #2271b1); outline-offset: 1px; }';
 
 	wp_register_style( 'presence-admin-bar', false, array(), WP_PRESENCE_VERSION );
 	wp_enqueue_style( 'presence-admin-bar' );
