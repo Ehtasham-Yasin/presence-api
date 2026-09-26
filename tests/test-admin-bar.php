@@ -437,4 +437,14 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 
 		remove_filter( 'show_admin_bar', '__return_false' );
 	}
+
+	/**
+	 * A user wears the color Gutenberg's getAvatarBorderColor() gives them, repeating after seven.
+	 */
+	public function test_user_colors_match_gutenberg() {
+		$this->assertSame( '#6F42C1', wp_presence_avatar_border_color( 7 ) );
+		$this->assertSame( '#D94145', wp_presence_avatar_border_color( 1 ) );
+		$this->assertSame( '#D94145', wp_presence_avatar_border_color( 8 ) );
+		$this->assertSame( '#00CFFF', wp_presence_avatar_border_color( 6 ) );
+	}
 }

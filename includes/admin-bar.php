@@ -284,7 +284,7 @@ function wp_presence_admin_bar_node( $wp_admin_bar ) {
 /**
  * Returns the color a user wears on every presence surface.
  *
- * Gutenberg's seven collaborator colors plus fifteen between them. Stepping by 9 spreads consecutive IDs around the wheel.
+ * Gutenberg's collaborator colors in its order, so a user wears the same color in the editor.
  *
  * @access private
  *
@@ -292,8 +292,8 @@ function wp_presence_admin_bar_node( $wp_admin_bar ) {
  * @return string A hex color.
  */
 function wp_presence_avatar_border_color( $user_id ) {
-	$colors = array( '#D94145', '#EE6A25', '#F89512', '#FBBF24', '#D4B519', '#AEAB13', '#879F11', '#51974B', '#218864', '#0F766E', '#0A9498', '#1CB1C6', '#00CFFF', '#24AFFD', '#498CF2', '#6168DF', '#6F42C1', '#9B43DA', '#CB3FEA', '#FF35EE', '#FD2FAD', '#EF3575' );
-	return $colors[ ( absint( $user_id ) * 9 ) % count( $colors ) ];
+	$colors = array( '#6F42C1', '#D94145', '#FBBF24', '#FF35EE', '#879F11', '#0F766E', '#00CFFF' );
+	return $colors[ absint( $user_id ) % count( $colors ) ];
 }
 
 /**
