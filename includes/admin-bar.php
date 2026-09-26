@@ -344,15 +344,16 @@ function wp_presence_admin_bar_node( $wp_admin_bar ) {
 /**
  * Returns the color a user wears on every presence surface.
  *
- * Derived from the ID alone, so it never changes. Golden-angle steps in OKLCH keep neighboring IDs visibly apart.
+ * Gutenberg's seven collaborator colors plus fifteen between them. Stepping by 9 spreads consecutive IDs around the wheel.
  *
  * @access private
  *
  * @param int $user_id User ID.
- * @return string A CSS oklch() color.
+ * @return string A hex color.
  */
 function wp_presence_avatar_border_color( $user_id ) {
-	return sprintf( 'oklch(72%% 0.15 %d)', (int) fmod( absint( $user_id ) * 137.508, 360 ) );
+	$colors = array( '#D94145', '#EE6A25', '#F89512', '#FBBF24', '#D4B519', '#AEAB13', '#879F11', '#51974B', '#218864', '#0F766E', '#0A9498', '#1CB1C6', '#00CFFF', '#24AFFD', '#498CF2', '#6168DF', '#6F42C1', '#9B43DA', '#CB3FEA', '#FF35EE', '#FD2FAD', '#EF3575' );
+	return $colors[ ( absint( $user_id ) * 9 ) % count( $colors ) ];
 }
 
 /**
