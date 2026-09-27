@@ -966,7 +966,14 @@ function wp_can_access_presence_room( $room, $user_id = 0 ) {
 		return get_post_type( $parsed['post_id'] ) === $parsed['post_type'] && user_can( $user_id, 'edit_post', $parsed['post_id'] );
 	}
 
-	return user_can( $user_id, 'edit_posts' );
+	// Any post type shown in the admin will do, so a role that edits only pages or a custom post type is included.
+	foreach ( get_post_types( array( 'show_ui' => true ), 'objects' ) as $post_type ) {
+		if ( user_can( $user_id, $post_type->cap->edit_posts ) ) {
+			return true;
+		}
+	}
+
+	return false;
 }
 
 /**
