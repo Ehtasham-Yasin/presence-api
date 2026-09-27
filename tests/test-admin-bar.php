@@ -8,6 +8,7 @@
  *
  * @covers ::wp_presence_admin_bar_node
  * @covers ::wp_presence_admin_bar_assets
+ * @covers ::wp_presence_avatar_border_color
  */
 class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 
@@ -41,6 +42,19 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 		// is_admin() reads $current_screen, which outlives the test that set it.
 		set_current_screen( 'dashboard' );
 		parent::tear_down();
+	}
+
+	/**
+	 * Lets the current user see where everyone else is, which takes list_users.
+	 */
+	private function let_current_user_list_users() {
+		add_filter(
+			'user_has_cap',
+			static function ( $allcaps ) {
+				$allcaps['list_users'] = true;
+				return $allcaps;
+			}
+		);
 	}
 
 	/**
@@ -152,6 +166,7 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 		$this->put_editor_on_post( self::$post_id );
 
 		wp_set_current_user( self::$contributor_id );
+		$this->let_current_user_list_users();
 		$markup = $this->render_node_markup();
 
 		$editor = get_userdata( self::$editor_id );
@@ -166,6 +181,7 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 
 		$other_editor_id = self::factory()->user->create( array( 'role' => 'editor' ) );
 		wp_set_current_user( $other_editor_id );
+		$this->let_current_user_list_users();
 		$markup = $this->render_node_markup();
 
 		$this->assertStringContainsString( 'Secret Draft', $markup );
@@ -185,7 +201,8 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 		wp_presence_admin_bar_node( $bar );
 
 		foreach ( $bar->get_nodes() as $node ) {
-			if ( ! empty( $node->href ) ) {
+			// Groups and their headers are structure, not controls.
+			if ( ! empty( $node->href ) || ! empty( $node->group ) || 'presence-bar-group-header' === ( $node->meta['class'] ?? '' ) ) {
 				continue;
 			}
 
@@ -198,14 +215,16 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 	}
 
 	/**
-	 * The count includes you, but the node still hides on your own rather than
-	 * reporting a room of one.
+	 * Alone, the node still shows, so the bar does not shift when someone arrives.
 	 */
-	public function test_no_indicator_when_you_are_the_only_one_online() {
+	public function test_the_node_stays_when_you_are_alone() {
 		wp_set_current_user( self::$editor_id );
 		wp_set_presence( 'admin/online', 'user-' . self::$editor_id, array( 'screen' => 'dashboard' ), self::$editor_id );
 
-		$this->assertSame( array(), $this->render_nodes() );
+		$nodes = $this->render_nodes();
+
+		$this->assertStringContainsString( 'Just you', $nodes['presence-online']->title );
+		$this->assertSame( 'Only you are online', $nodes['presence-online']->meta['aria-label'] );
 	}
 
 	public function test_no_indicator_for_a_user_without_edit_posts() {
@@ -231,18 +250,22 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 	public function test_users_on_the_same_admin_page_are_grouped_here() {
 		$this->view_admin_page( 'upload.php', 'upload' );
 
-		$here = get_userdata( $this->put_user_on_screen( 'upload' ) );
-		$this->put_user_on_screen( 'edit-comments' );
+		$here      = get_userdata( $this->put_user_on_screen( 'upload' ) );
+		$elsewhere = $this->put_user_on_screen( 'edit-comments' );
 
 		wp_set_current_user( self::$editor_id );
+		$this->let_current_user_list_users();
 		$nodes = $this->render_nodes();
 
 		$this->assertArrayHasKey( 'presence-group-here', $nodes );
 		$this->assertArrayHasKey( 'presence-group-elsewhere', $nodes );
 		$this->assertArrayHasKey( 'presence-user-' . $here->ID, $nodes );
-		// The avatar stack is built from the people on this page, you included.
+		// Only people on this page wear their color.
+		$this->assertStringContainsString( 'outline-color:', $nodes[ 'presence-user-' . $here->ID ]->title );
+		$this->assertStringNotContainsString( 'outline-color:', $nodes[ 'presence-user-' . $elsewhere ]->title );
+		// The faces are the others on this page; you are already in My Account.
 		$this->assertStringContainsString( 'alt="' . esc_attr( $here->display_name ) . '"', $nodes['presence-online']->title );
-		$this->assertStringContainsString(
+		$this->assertStringNotContainsString(
 			'alt="' . esc_attr( get_userdata( self::$editor_id )->display_name ) . '"',
 			$nodes['presence-online']->title
 		);
@@ -327,7 +350,7 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 	 * Both groups are capped so a busy site cannot grow the dropdown past the
 	 * height of the screen.
 	 */
-	public function test_each_group_is_capped_at_ten_with_a_count_for_the_rest() {
+	public function test_each_group_is_capped_at_ten() {
 		$this->view_admin_page( 'upload.php', 'upload' );
 
 		for ( $i = 0; $i < 11; $i++ ) {
@@ -336,12 +359,13 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 		}
 
 		wp_set_current_user( self::$editor_id );
+		$this->let_current_user_list_users();
 		$nodes = $this->render_nodes();
 
-		$this->assertStringContainsString( '+1 more', $nodes['presence-here-overflow']->title );
-		$this->assertStringContainsString( '+1 more', $nodes['presence-elsewhere-overflow']->title );
-		// The "elsewhere" overflow is the one that can be acted on.
-		$this->assertSame( admin_url( 'users.php?presence_status=online' ), $nodes['presence-elsewhere-overflow']->href );
+		$rows = array_count_values( wp_list_pluck( array_filter( $nodes, fn( $n ) => 0 === strpos( $n->id, 'presence-user-' ) ), 'parent' ) );
+
+		$this->assertSame( array( 'presence-here' => 10, 'presence-elsewhere' => 10 ), $rows );
+		$this->assertSame( wp_nonce_url( admin_url( 'users.php?presence_status=online' ), 'presence_online_filter' ), $nodes['presence-view-all']->href );
 	}
 
 	/**
@@ -360,6 +384,7 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 		);
 
 		wp_set_current_user( self::$editor_id );
+		$this->let_current_user_list_users();
 		$nodes = $this->render_nodes();
 
 		$node = $nodes[ 'presence-user-' . $user_id ];
@@ -377,6 +402,7 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 		$user_id = $this->put_user_on_screen( 'plugins' );
 
 		wp_set_current_user( self::$editor_id );
+		$this->let_current_user_list_users();
 		$nodes = $this->render_nodes();
 
 		$title = $nodes[ 'presence-user-' . $user_id ]->title;
@@ -432,5 +458,32 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 		$this->assertFalse( wp_style_is( 'presence-admin-bar', 'enqueued' ) );
 
 		remove_filter( 'show_admin_bar', '__return_false' );
+	}
+
+	/**
+	 * A user wears the color Gutenberg's getAvatarBorderColor() gives them, repeating after seven.
+	 */
+	public function test_user_colors_match_gutenberg() {
+		$this->assertSame( '#6F42C1', wp_presence_avatar_border_color( 7 ) );
+		$this->assertSame( '#D94145', wp_presence_avatar_border_color( 1 ) );
+		$this->assertSame( '#D94145', wp_presence_avatar_border_color( 8 ) );
+		$this->assertSame( '#00CFFF', wp_presence_avatar_border_color( 6 ) );
+	}
+
+	/**
+	 * Without list_users you see who shares your page, not where everyone else is.
+	 */
+	public function test_elsewhere_needs_list_users() {
+		$this->view_admin_page( 'upload.php', 'upload' );
+
+		$here      = $this->put_user_on_screen( 'upload' );
+		$elsewhere = $this->put_user_on_screen( 'edit-comments' );
+
+		wp_set_current_user( self::$editor_id );
+		$nodes = $this->render_nodes();
+
+		$this->assertArrayHasKey( 'presence-user-' . $here, $nodes );
+		$this->assertArrayNotHasKey( 'presence-user-' . $elsewhere, $nodes );
+		$this->assertArrayNotHasKey( 'presence-view-all', $nodes );
 	}
 }

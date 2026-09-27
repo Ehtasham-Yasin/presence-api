@@ -22,18 +22,13 @@ function wp_presence_admin_bar_node( $wp_admin_bar ) {
 	$entries     = wp_get_presence( wp_presence_admin_room() );
 	$current_uid = get_current_user_id();
 
-	// The count includes you, the gate does not. A lone user gets no node,
-	// but once anyone else is here the number matches every other surface.
+	// The node stays put when you are alone, so the bar never shifts and presence always shows it is on.
 	$others = array_filter(
 		$entries,
 		function ( $e ) use ( $current_uid ) {
 			return (int) $e->user_id !== $current_uid;
 		}
 	);
-
-	if ( empty( $others ) ) {
-		return;
-	}
 
 	/*
 	 * Determine the current screen slug to match against what the JS heartbeat
@@ -130,21 +125,16 @@ function wp_presence_admin_bar_node( $wp_admin_bar ) {
 		}
 	}
 
-	// You first, then others on this page. Mirrors the flyout's "On this page".
-	$stack_ids = array( $current_uid );
-	foreach ( $here as $entry ) {
-		$stack_ids[] = (int) $entry->user_id;
-	}
-	// You, plus four others. Whole faces, not a stack, so five is what fits.
-	$stack_limit = 5;
-	$stack_ids   = array_slice( array_unique( $stack_ids ), 0, $stack_limit );
+	// Others on this page only; your own face is already in My Account beside it. Five whole faces fit.
+	$stack_ids = array_slice( array_unique( array_map( 'intval', wp_list_pluck( $here, 'user_id' ) ) ), 0, 5 );
 
-	$avatar = function ( $user, $size, $alt = '' ) {
-		$color = ' style="border-color:' . esc_attr( wp_presence_avatar_border_color( $user->ID ) ) . '"';
-		return '<img class="presence-bar-avatar" src="' . esc_url( get_avatar_url( $user->ID, array( 'size' => wp_presence_get_avatar_fetch_size( $size ) ) ) ) . '" width="' . (int) $size . '" height="' . (int) $size . '"' . $color . ' alt="' . esc_attr( $alt ) . '" />';
+	// Only people on this page wear their color; it pairs them with what they do on the screen you share.
+	$avatar = function ( $user, $size, $alt = '', $ring = true ) {
+		$color = $ring ? ' style="outline-color:' . esc_attr( wp_presence_avatar_border_color( $user->ID ) ) . '"' : '';
+		return '<img class="presence-bar-avatar' . ( $ring ? '' : ' presence-bar-avatar-plain' ) . '" src="' . esc_url( get_avatar_url( $user->ID, array( 'size' => wp_presence_get_avatar_fetch_size( $size ) ) ) ) . '" width="' . (int) $size . '" height="' . (int) $size . '"' . $color . ' alt="' . esc_attr( $alt ) . '" />';
 	};
 
-	$stack_html = '<span class="presence-bar-avatars">';
+	$stack_html = '';
 
 	foreach ( $stack_ids as $stack_uid ) {
 		$user = get_userdata( $stack_uid );
@@ -154,122 +144,92 @@ function wp_presence_admin_bar_node( $wp_admin_bar ) {
 		$stack_html .= str_replace( ' />', ' title="' . esc_attr( $user->display_name ) . '" />', $avatar( $user, 20, $user->display_name ) );
 	}
 
-	$stack_html .= '</span>';
+	$stack_html = '' !== $stack_html ? '<span class="presence-bar-avatars">' . $stack_html . '</span>' : '';
 
 	$online_count = count( wp_presence_online_user_ids( $entries ) );
 
 	/* translators: %d: Number of online users, including the current user. */
 	$label = sprintf( _n( '%d online', '%d online', $online_count, 'presence-api' ), $online_count );
+	/* translators: %d: Number of users currently online. */
+	$aria_label = sprintf( _n( '%d user online', '%d users online', $online_count, 'presence-api' ), $online_count );
 
-	$wp_admin_bar->add_node(
-		array(
-			'id'    => 'presence-online',
-			'title' => $stack_html . '<span class="presence-bar-count">' . esc_html( $label ) . '</span>',
-			'href'  => false,
-			'meta'  => array(
-				'class'      => 'presence-bar-node menupop',
-				'tabindex'   => 0,
-				'aria-label' => sprintf(
-				/* translators: %d: Number of users currently online. */
-					_n( '%d user online', '%d users online', $online_count, 'presence-api' ),
-					$online_count
-				),
-			),
-		)
-	);
-
-	// Add dropdown items grouped by "here" then "elsewhere".
-	// "On this page" always shows (you're always here).
-	$wp_admin_bar->add_node(
-		array(
-			'parent' => 'presence-online',
-			'id'     => 'presence-group-here',
-			'title'  => '<span class="presence-bar-group-label">' . esc_html__( 'On this page', 'presence-api' ) . '</span>',
-			'href'   => false,
-			'meta'   => array(
-				'class'    => 'presence-bar-group-header',
-				'tabindex' => 0,
-			),
-		)
-	);
-
-	// Current user first.
-	$current_user = get_userdata( $current_uid );
-
-	$wp_admin_bar->add_node(
-		array(
-			'parent' => 'presence-online',
-			'id'     => 'presence-user-self',
-			'title'  => ( $current_user ? $avatar( $current_user, 24 ) : '' ) . esc_html( $current_user ? $current_user->display_name : __( 'You', 'presence-api' ) ) . ' <span class="presence-bar-you">(' . esc_html__( 'you', 'presence-api' ) . ')</span>',
-			'href'   => false,
-			'meta'   => array( 'tabindex' => 0 ),
-		)
-	);
-
-	// Others on the same page (capped at 10).
-	$max_here = 10;
-	$shown    = 0;
-
-	foreach ( $here as $entry ) {
-		if ( $shown >= $max_here ) {
-			$remaining = count( $here ) - $max_here;
-			$wp_admin_bar->add_node(
-				array(
-					'parent' => 'presence-online',
-					'id'     => 'presence-here-overflow',
-					/* translators: %d: Number of additional online users. */
-					'title'  => '<span class="presence-bar-screen">' . esc_html( sprintf( __( '+%d more', 'presence-api' ), $remaining ) ) . '</span>',
-					'href'   => admin_url( 'users.php?presence_status=online' ),
-				)
-			);
-			break;
-		}
-
-		$user = get_userdata( $entry->user_id );
-		if ( ! $user ) {
-			continue;
-		}
-		$wp_admin_bar->add_node(
-			array(
-				'parent' => 'presence-online',
-				'id'     => 'presence-user-' . $entry->user_id,
-				'title'  => $avatar( $user, 24 ) . esc_html( $user->display_name ),
-				'href'   => false,
-				'meta'   => array( 'tabindex' => 0 ),
-			)
-		);
-		++$shown;
+	if ( empty( $others ) ) {
+		$label      = __( 'Just you', 'presence-api' );
+		$aria_label = __( 'Only you are online', 'presence-api' );
 	}
 
-	if ( ! empty( $elsewhere ) ) {
-		$wp_admin_bar->add_node(
+	$wp_admin_bar->add_node(
+		array(
+			// Just inside My Account, which core adds later at 9991; top-secondary renders in DOM order.
+			'parent' => 'top-secondary',
+			'id'     => 'presence-online',
+			'title'  => $stack_html . '<span class="presence-bar-count">' . esc_html( $label ) . '</span>',
+			'href'   => false,
+			'meta'   => array(
+				'class'      => 'presence-bar-node menupop',
+				'tabindex'   => 0,
+				'aria-label' => $aria_label,
+			),
+		)
+	);
+
+	// Each section is a core group, like the WordPress logo menu.
+	$add_section = function ( $id, $label ) use ( $wp_admin_bar ) {
+		$wp_admin_bar->add_group(
 			array(
 				'parent' => 'presence-online',
-				'id'     => 'presence-group-elsewhere',
-				'title'  => '<span class="presence-bar-group-label">' . esc_html__( 'Elsewhere', 'presence-api' ) . '</span>',
-				'href'   => false,
-				'meta'   => array(
-					'class'    => 'presence-bar-group-header',
-					'tabindex' => 0,
-				),
+				'id'     => 'presence-' . $id,
 			)
 		);
+		$wp_admin_bar->add_node(
+			array(
+				'parent' => 'presence-' . $id,
+				'id'     => 'presence-group-' . $id,
+				'title'  => '<span class="presence-bar-group-label">' . esc_html( $label ) . '</span>',
+				'href'   => false,
+				'meta'   => array( 'class' => 'presence-bar-group-header' ),
+			)
+		);
+	};
 
-		$max_elsewhere = 10;
-		$shown         = 0;
+	$row = function ( $group, $user, $context = '', $href = false ) use ( $wp_admin_bar, $avatar ) {
+		$ring = 'here' === $group;
+		$wp_admin_bar->add_node(
+			array(
+				'parent' => 'presence-' . $group,
+				'id'     => 'presence-user-' . $user->ID,
+				'title'  => $avatar( $user, 18, '', $ring ) . '<span class="presence-bar-name">' . esc_html( $user->display_name ) . '</span>' . ( '' !== $context ? '<span class="presence-bar-screen">' . esc_html( $context ) . '</span>' : '' ),
+				'href'   => $href,
+				'meta'   => $href ? array() : array( 'tabindex' => 0 ),
+			)
+		);
+	};
+
+	// Each group is capped so a busy site cannot grow the dropdown past the screen.
+	$max_rows = 10;
+
+	// You are left out, as in Google Docs; My Account sits right beside the faces.
+	if ( ! empty( $here ) ) {
+		$add_section( 'here', __( 'On this page', 'presence-api' ) );
+
+		foreach ( array_slice( $here, 0, $max_rows ) as $entry ) {
+			$user = get_userdata( $entry->user_id );
+			if ( $user ) {
+				$row( 'here', $user );
+			}
+		}
+	}
+
+	// Where others are is for people who can browse the site's users; the rest see only who shares their page.
+	$can_list_users = current_user_can( 'list_users' );
+
+	if ( $can_list_users && ! empty( $elsewhere ) ) {
+		$add_section( 'elsewhere', __( 'Elsewhere', 'presence-api' ) );
+
+		$shown = 0;
 
 		foreach ( $elsewhere as $entry ) {
-			if ( $shown >= $max_elsewhere ) {
-				$remaining = count( $elsewhere ) - $max_elsewhere;
-				$wp_admin_bar->add_node(
-					array(
-						'parent' => 'presence-online',
-						'id'     => 'presence-elsewhere-overflow',
-						/* translators: %d: Number of additional online users. */
-						'title'  => '<span class="presence-bar-screen">' . esc_html( sprintf( __( '+%d more', 'presence-api' ), $remaining ) ) . '</span>',
-						'href'   => admin_url( 'users.php?presence_status=online' ),
-					)
-				);
+			if ( $shown >= $max_rows ) {
 				break;
 			}
 
@@ -281,7 +241,6 @@ function wp_presence_admin_bar_node( $wp_admin_bar ) {
 			$entry_ps     = isset( $entry->data['post_status'] ) ? $entry->data['post_status'] : '';
 			$screen_label = $screen ? WP_Presence_Widget_Whos_Online::get_rich_screen_label( $screen, $entry_ps ) : '';
 			$screen_url   = $screen ? WP_Presence_Widget_Whos_Online::get_screen_url( $screen ) : false;
-			$is_title     = false;
 
 			// If user is editing a specific post, show the post title and link to it.
 			if ( in_array( $screen, array( 'post', 'edit-post' ), true ) && isset( $user_editing_post[ (int) $entry->user_id ] ) ) {
@@ -289,7 +248,6 @@ function wp_presence_admin_bar_node( $wp_admin_bar ) {
 				$post_title = get_the_title( $post_id );
 				if ( $post_title ) {
 					$screen_label = $post_title;
-					$is_title     = true;
 				}
 				$screen_url = get_edit_post_link( $post_id, 'raw' );
 			}
@@ -297,46 +255,33 @@ function wp_presence_admin_bar_node( $wp_admin_bar ) {
 			// If user is viewing a post on the frontend, show the post title and link to it.
 			if ( 'front' === $screen && ! empty( $entry->data['title'] ) ) {
 				$screen_label = $entry->data['title'];
-				$is_title     = true;
 				if ( ! empty( $entry->data['post_id'] ) ) {
 					$screen_url = get_permalink( (int) $entry->data['post_id'] );
 				}
 			}
 
-			$item_title = $avatar( $user, 24 ) . esc_html( $user->display_name );
-
-			if ( $screen_label ) {
-				if ( $is_title ) {
-					$formatted = esc_html( $screen_label );
-				} else {
-					$parts     = explode( ' ', $screen_label, 2 );
-					$formatted = count( $parts ) > 1
-						? '<em>' . esc_html( $parts[0] ) . '</em> ' . esc_html( $parts[1] )
-						: esc_html( $screen_label );
-				}
-				$item_title .= ' <span class="presence-bar-screen">&middot; ' . $formatted . '</span>';
-			}
-
-			$wp_admin_bar->add_node(
-				array(
-					'parent' => 'presence-online',
-					'id'     => 'presence-user-' . $entry->user_id,
-					'title'  => $item_title,
-					'href'   => $screen_url ? $screen_url : false,
-					'meta'   => $screen_url ? array() : array( 'tabindex' => 0 ),
-				)
-			);
+			$row( 'elsewhere', $user, $screen_label, $screen_url ? $screen_url : false );
 			++$shown;
 		}
 	}
 
-	// Add "View online users" link at the bottom.
-	$wp_admin_bar->add_node(
+	if ( ! $can_list_users ) {
+		return;
+	}
+
+	$wp_admin_bar->add_group(
 		array(
 			'parent' => 'presence-online',
+			'id'     => 'presence-actions',
+			'meta'   => array( 'class' => 'ab-sub-secondary' ),
+		)
+	);
+	$wp_admin_bar->add_node(
+		array(
+			'parent' => 'presence-actions',
 			'id'     => 'presence-view-all',
 			'title'  => __( 'View online users', 'presence-api' ),
-			'href'   => admin_url( 'users.php?presence_status=online' ),
+			'href'   => wp_nonce_url( admin_url( 'users.php?presence_status=online' ), 'presence_online_filter' ),
 		)
 	);
 }
@@ -344,7 +289,7 @@ function wp_presence_admin_bar_node( $wp_admin_bar ) {
 /**
  * Returns the color a user wears on every presence surface.
  *
- * Gutenberg's seven collaborator colors plus fifteen between them. Stepping by 9 spreads consecutive IDs around the wheel.
+ * Gutenberg's collaborator colors in its order, so a user wears the same color in the editor.
  *
  * @access private
  *
@@ -352,8 +297,8 @@ function wp_presence_admin_bar_node( $wp_admin_bar ) {
  * @return string A hex color.
  */
 function wp_presence_avatar_border_color( $user_id ) {
-	$colors = array( '#D94145', '#EE6A25', '#F89512', '#FBBF24', '#D4B519', '#AEAB13', '#879F11', '#51974B', '#218864', '#0F766E', '#0A9498', '#1CB1C6', '#00CFFF', '#24AFFD', '#498CF2', '#6168DF', '#6F42C1', '#9B43DA', '#CB3FEA', '#FF35EE', '#FD2FAD', '#EF3575' );
-	return $colors[ ( absint( $user_id ) * 9 ) % count( $colors ) ];
+	$colors = array( '#6F42C1', '#D94145', '#FBBF24', '#FF35EE', '#879F11', '#0F766E', '#00CFFF' );
+	return $colors[ absint( $user_id ) % count( $colors ) ];
 }
 
 /**
@@ -365,29 +310,25 @@ function wp_presence_admin_bar_assets() {
 	}
 
 	$css = '
-		#wp-admin-bar-presence-online > .ab-item { display: flex !important; align-items: center; gap: 2px; cursor: default; }
-		#wp-admin-bar-presence-online .presence-bar-avatars { display: inline-flex; align-items: center; gap: 4px; margin-inline-end: 6px; }
-		#wp-admin-bar-presence-online .presence-bar-avatar { display: inline-block; box-sizing: border-box; width: 20px !important; height: 20px !important; padding: 1px; border: 2px solid; border-radius: 50%; background: none; vertical-align: middle; }
-		#wp-admin-bar-presence-online .ab-submenu { min-width: 280px; padding: 8px 0 !important; }
-		#wp-admin-bar-presence-online .ab-submenu .presence-bar-avatar { width: 24px !important; height: 24px !important; margin-inline-end: 10px; flex: none; }
-		#wp-admin-bar-presence-online .ab-submenu li[id^="wp-admin-bar-presence-user-"] > .ab-item { display: flex !important; align-items: center; height: auto !important; padding: 4px 16px !important; line-height: 24px !important; }
-		#wp-admin-bar-presence-online .ab-submenu li[id^="wp-admin-bar-presence-user-"] .presence-bar-you,
-		#wp-admin-bar-presence-online .ab-submenu li[id^="wp-admin-bar-presence-user-"] .presence-bar-screen { margin-inline-start: 0.3em; white-space: pre; line-height: inherit; }
-		#wp-admin-bar-presence-online .ab-submenu > li:not([id^="wp-admin-bar-presence-user-"]) > .ab-item { padding-inline: 16px !important; }
-		#wp-admin-bar-presence-online .ab-submenu > #wp-admin-bar-presence-here-overflow > .ab-item, #wp-admin-bar-presence-online .ab-submenu > #wp-admin-bar-presence-elsewhere-overflow > .ab-item { padding-inline-start: 50px !important; }
-		#wp-admin-bar-presence-online .presence-bar-count { vertical-align: middle; }
-		#wp-admin-bar-presence-online .presence-bar-you { color: #a7aaad; font-weight: normal; }
-		#wp-admin-bar-presence-online .presence-bar-screen { color: #a7aaad; font-size: 12px; }
-		#wp-admin-bar-presence-online .presence-bar-screen em { font-style: italic; }
-		#wp-admin-bar-presence-online .presence-bar-group-header > .ab-item { pointer-events: none; }
-		#wp-admin-bar-presence-online .presence-bar-group-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: inherit; }
-		#wp-admin-bar-presence-online .presence-bar-group-header > .ab-item:not(:focus) { color: #a7aaad !important; }
+		#wp-admin-bar-presence-online > .ab-item { display: flex !important; align-items: center; gap: 6px; cursor: default; }
+		#wp-admin-bar-presence-online .presence-bar-avatars { display: inline-flex; align-items: center; gap: 9px; margin-inline: 3px; }
+		#wp-admin-bar-presence-online .presence-bar-avatar { width: 20px !important; height: 20px !important; border-radius: 50%; outline: 2px solid; outline-offset: 1px; }
+		#wp-admin-bar-presence-online .ab-sub-wrapper { width: 320px; }
+		#wp-admin-bar-presence-online .ab-submenu .ab-item { display: flex !important; align-items: center; gap: 10px; }
+		#wp-admin-bar-presence-online .ab-submenu .presence-bar-avatar { width: 18px !important; height: 18px !important; flex: none; outline-offset: 0; }
+		#wp-admin-bar-presence-online .presence-bar-avatar-plain { outline: none; }
+		#wp-admin-bar-presence-online .presence-bar-name, #wp-admin-bar-presence-online .presence-bar-screen { overflow: hidden; text-overflow: ellipsis; }
+		#wp-admin-bar-presence-online .presence-bar-name { flex: 0 0 auto; max-width: 60%; }
+		#wp-admin-bar-presence-online .presence-bar-screen { flex: 0 1 auto; min-width: 0; margin-inline-start: auto; padding-inline-start: 16px; color: #a7aaad; font-size: 11px; }
+		#wp-admin-bar-presence-online .presence-bar-group-header > .ab-item { color: #a7aaad !important; cursor: default; }
+		#wp-admin-bar-presence-online .presence-bar-group-label { font-size: 11px; font-weight: 500; text-transform: uppercase; color: inherit; }
 		.admin-color-light #wpadminbar #wp-admin-bar-presence-online .presence-bar-count,
-		.admin-color-light #wpadminbar #wp-admin-bar-presence-online .presence-bar-you,
-		.admin-color-light #wpadminbar #wp-admin-bar-presence-online .presence-bar-screen { color: #50575e !important; }
-		.admin-color-light #wpadminbar #wp-admin-bar-presence-online .presence-bar-group-header > .ab-item:not(:focus) { color: #50575e !important; }
-		#wp-admin-bar-presence-group-elsewhere > .ab-item, #wp-admin-bar-presence-view-all > .ab-item { border-top: 1px solid color-mix(in srgb, currentColor 15%, transparent) !important; margin-top: 8px !important; padding-top: 8px !important; }
+		.admin-color-light #wpadminbar #wp-admin-bar-presence-online .presence-bar-screen,
+		.admin-color-light #wpadminbar #wp-admin-bar-presence-online .presence-bar-group-header > .ab-item { color: #50575e !important; }
 	';
+
+	// You wear the admin theme color, as in the block editor, so your ring never matches anyone on the page.
+	$css .= '#wpadminbar:has(#wp-admin-bar-presence-here) #wp-admin-bar-my-account.with-avatar > .ab-item img { outline: 2px solid var(--wp-admin-theme-color, #2271b1); outline-offset: 1px; }';
 
 	wp_register_style( 'presence-admin-bar', false, array(), WP_PRESENCE_VERSION );
 	wp_enqueue_style( 'presence-admin-bar' );
