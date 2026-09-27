@@ -7,10 +7,12 @@
  * screen receive the new revision on the next Heartbeat tick and render a
  * non-blocking notice prompting them to reload.
  *
- * Coverage in this first cut: classic admin screens that submit via POST and
- * redirect on success — Settings → General/Writing/Reading/Discussion/Media/Permalinks,
- * post edits (post.php), user edits (user-edit.php, profile.php), term edits
- * (edit-tags.php), and comment edits (comment.php). JS-driven and REST-driven
+ * Coverage: classic admin screens that submit via POST and redirect on
+ * success: Settings → General/Writing/Reading/Discussion/Media/Permalinks/Privacy,
+ * Settings API pages whose menu slug is their option group, post edits
+ * (post.php), user edits (user-edit.php, profile.php), term edits
+ * (edit-tags.php), comment edits (comment.php), and on multisite Network
+ * Settings and the Edit Site tabs. JS-driven and REST-driven
  * screens can opt in via the `wp_presence_current_screen_key` filter plus a
  * future client-side `markScreenStale()` API.
  *
@@ -53,10 +55,27 @@ function wp_presence_get_screen_revisions() {
 }
 
 /**
- * Returns the six Settings pages that get their own dedicated revision option.
+ * Returns the network-wide screen-revision map.
  *
- * Matches the switch in wp_presence_current_screen_key() and core's own
- * $allowed_options gate in wp-admin/options.php. Anything outside this list
+ * A site option, since core fires some Edit Site save hooks while switched
+ * to the edited site.
+ *
+ * @since 0.10.0
+ * @access private
+ *
+ * @return array Same shape as wp_presence_get_screen_revisions().
+ */
+function wp_presence_get_network_screen_revisions() {
+	$map = get_site_option( 'wp_presence_network_screen_revisions', array() );
+	return is_array( $map ) ? $map : array();
+}
+
+/**
+ * Returns the Settings pages that get their own dedicated revision option.
+ *
+ * Matches the switch in wp_presence_current_screen_key(): core's own
+ * $allowed_options gate in wp-admin/options.php, plus the Privacy page,
+ * which saves through its own form. Anything outside this list
  * still matches the `options/` prefix but is treated as a custom key instead,
  * so an arbitrary options/{page} value from the REST endpoint can't create an
  * unbounded number of option rows.
@@ -66,7 +85,7 @@ function wp_presence_get_screen_revisions() {
  * @return string[]
  */
 function wp_presence_known_options_pages() {
-	return array( 'general', 'writing', 'reading', 'discussion', 'media', 'permalink' );
+	return array( 'general', 'writing', 'reading', 'discussion', 'media', 'permalink', 'privacy' );
 }
 
 /**
@@ -76,7 +95,7 @@ function wp_presence_known_options_pages() {
  *
  * @param string $screen_key Normalized screen key.
  * @return array {
- *     @type string $type     One of 'post', 'user', 'term', 'comment', 'options', 'custom'.
+ *     @type string $type     One of 'post', 'user', 'term', 'comment', 'options', 'network', 'custom'.
  *     @type int    $id       Object ID. Present for 'post', 'user', 'term', 'comment'.
  *     @type string $taxonomy Taxonomy slug. Present for 'term'.
  *     @type string $page     Settings page slug. Present for 'options'.
@@ -116,6 +135,10 @@ function wp_presence_parse_screen_key_target( $screen_key ) {
 				'page' => $page,
 			);
 		}
+	}
+
+	if ( 0 === strpos( $screen_key, 'network/' ) ) {
+		return array( 'type' => 'network' );
 	}
 
 	return array( 'type' => 'custom' );
@@ -185,10 +208,52 @@ function wp_presence_get_screen_revision( $screen_key ) {
 			$entry = get_option( 'wp_presence_screen_rev_options_' . $target['page'], null );
 			return $entry ? $entry : null;
 
+		case 'network':
+			$map = wp_presence_get_network_screen_revisions();
+			return isset( $map[ $screen_key ] ) ? $map[ $screen_key ] : null;
+
 		default:
 			$map = wp_presence_get_screen_revisions();
 			return isset( $map[ $screen_key ] ) ? $map[ $screen_key ] : null;
 	}
+}
+
+/**
+ * Advances one key in a bounded screen-revision map.
+ *
+ * @since 0.10.0
+ * @access private
+ *
+ * @param array  $map        Map from wp_presence_get_screen_revisions() or
+ *                           wp_presence_get_network_screen_revisions().
+ * @param string $screen_key Normalized screen key.
+ * @param int    $actor_id   User who triggered the bump.
+ * @return array The updated map. The new revision is in `$map[ $screen_key ]['rev']`.
+ */
+function wp_presence_advance_screen_revision_map( $map, $screen_key, $actor_id ) {
+	$previous = isset( $map[ $screen_key ]['rev'] ) ? (int) $map[ $screen_key ]['rev'] : 0;
+
+	// Clock-seeded so an evicted key never restarts below a viewer's baseline.
+	$map[ $screen_key ] = array(
+		'rev'      => max( $previous + 1, time() ),
+		'actor_id' => (int) $actor_id,
+		'time'     => time(),
+	);
+
+	// LRU-ish trim by oldest update time when over the limit.
+	if ( count( $map ) > WP_PRESENCE_SCREEN_REV_LIMIT ) {
+		uasort(
+			$map,
+			static function ( $a, $b ) {
+				$at = isset( $a['time'] ) ? (int) $a['time'] : 0;
+				$bt = isset( $b['time'] ) ? (int) $b['time'] : 0;
+				return $at <=> $bt;
+			}
+		);
+		$map = array_slice( $map, - WP_PRESENCE_SCREEN_REV_LIMIT, null, true );
+	}
+
+	return $map;
 }
 
 /**
@@ -206,23 +271,23 @@ function wp_presence_normalize_screen_key( $screen_key ) {
 /**
  * Records a screen's revision and actor.
  *
- * Posts, users, terms, comments, and the six known Settings pages each write
+ * Posts, users, terms, comments, and the known Settings pages each write
  * straight to the object (or their own option) they describe, with no prior
- * read — the revision is the current time, not an incremented counter, so
+ * read: the revision is the current time, not an incremented counter, so
  * there's nothing to read-modify-write and nothing for two overlapping saves
  * to race over. Posts write nothing at all: post_modified_gmt and _edit_last
  * are already set by core on the same save.
  *
  * Anything else falls back to a shared, size-bounded option keyed by screen
  * key, the same storage this function used for every key before this split.
+ * `network/` keys use a network-wide equivalent.
  *
  * @since 0.1.3
  *
  * @param string $screen_key Screen key to bump.
  * @param int    $actor_id   Optional. Defaults to the current user.
- * @return int|false New revision (a Unix timestamp for dedicated storage, an
- *                    incrementing counter for the shared-option fallback), or
- *                    false when the key is empty.
+ * @return int|false New revision (a Unix timestamp, or one past the previous
+ *                    revision when that is later), or false when the key is empty.
  */
 function wp_presence_bump_screen_revision( $screen_key, $actor_id = 0 ) {
 	$screen_key = wp_presence_normalize_screen_key( $screen_key );
@@ -294,30 +359,15 @@ function wp_presence_bump_screen_revision( $screen_key, $actor_id = 0 ) {
 			);
 			break;
 
+		case 'network':
+			$map      = wp_presence_advance_screen_revision_map( wp_presence_get_network_screen_revisions(), $screen_key, $actor_id );
+			$revision = $map[ $screen_key ]['rev'];
+			update_site_option( 'wp_presence_network_screen_revisions', $map );
+			break;
+
 		default:
-			$map      = wp_presence_get_screen_revisions();
-			$previous = isset( $map[ $screen_key ]['rev'] ) ? (int) $map[ $screen_key ]['rev'] : 0;
-			$revision = $previous + 1;
-
-			$map[ $screen_key ] = array(
-				'rev'      => $revision,
-				'actor_id' => (int) $actor_id,
-				'time'     => time(),
-			);
-
-			// LRU-ish trim by oldest update time when over the limit.
-			if ( count( $map ) > WP_PRESENCE_SCREEN_REV_LIMIT ) {
-				uasort(
-					$map,
-					static function ( $a, $b ) {
-						$at = isset( $a['time'] ) ? (int) $a['time'] : 0;
-						$bt = isset( $b['time'] ) ? (int) $b['time'] : 0;
-						return $at <=> $bt;
-					}
-				);
-				$map = array_slice( $map, - WP_PRESENCE_SCREEN_REV_LIMIT, null, true );
-			}
-
+			$map      = wp_presence_advance_screen_revision_map( wp_presence_get_screen_revisions(), $screen_key, $actor_id );
+			$revision = $map[ $screen_key ]['rev'];
 			update_option( 'wp_presence_screen_revisions', $map, false );
 			break;
 	}
@@ -391,6 +441,25 @@ function wp_presence_current_screen_key() {
 			$key = str_replace( 'options-', 'options/', $screen->base );
 			break;
 
+		case 'options-privacy':
+			$key = 'options/privacy';
+			break;
+
+		case 'settings-network':
+			$key = 'network/settings';
+			break;
+
+		case 'site-info-network':
+		case 'site-users-network':
+		case 'site-themes-network':
+		case 'site-settings-network':
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only screen identification.
+			$site_id = isset( $_GET['id'] ) ? absint( $_GET['id'] ) : 0;
+			if ( $site_id ) {
+				$key = 'network/' . substr( $screen->base, 0, - strlen( '-network' ) ) . '/' . $site_id;
+			}
+			break;
+
 		case 'post':
 			$post = get_post();
 			if ( $post ) {
@@ -431,6 +500,14 @@ function wp_presence_current_screen_key() {
 				$key = 'comment/' . $comment_id;
 			}
 			break;
+
+		default:
+			$group = wp_presence_settings_page_option_group( $screen->base );
+			if ( $group ) {
+				// Sanitized the same way wp_presence_on_updated_option() reads option_page.
+				$key = 'options/' . sanitize_key( $group );
+			}
+			break;
 	}
 
 	/**
@@ -445,6 +522,31 @@ function wp_presence_current_screen_key() {
 	 */
 	$key = (string) apply_filters( 'wp_presence_current_screen_key', $key, $screen );
 	return '' === $key ? '' : wp_presence_normalize_screen_key( $key );
+}
+
+/**
+ * Returns the option group a Settings API page saves, or '' if it isn't one.
+ *
+ * Matches when the menu slug is also a registered option group, as core's
+ * Settings API examples do. Other pages can use the
+ * `wp_presence_current_screen_key` filter.
+ *
+ * @since 0.10.0
+ * @access private
+ *
+ * @param string $screen_base Screen base, e.g. `settings_page_my-plugin`.
+ * @return string
+ */
+function wp_presence_settings_page_option_group( $screen_base ) {
+	foreach ( array( 'settings_page_', 'toplevel_page_' ) as $prefix ) {
+		if ( 0 !== strpos( $screen_base, $prefix ) ) {
+			continue;
+		}
+		$slug   = substr( $screen_base, strlen( $prefix ) );
+		$groups = wp_list_pluck( get_registered_settings(), 'group' );
+		return in_array( $slug, array_map( 'sanitize_key', $groups ), true ) ? $slug : '';
+	}
+	return '';
 }
 
 /**
@@ -541,6 +643,116 @@ function wp_presence_on_edit_comment( $comment_id ) {
 }
 
 /**
+ * Bumps the Privacy settings screen's revision when its page is changed.
+ *
+ * The Privacy page saves through its own form, so there is no option_page.
+ *
+ * @since 0.10.0
+ */
+function wp_presence_on_privacy_policy_page_updated() {
+	if ( ! wp_presence_is_admin_screen_save() ) {
+		return;
+	}
+	wp_presence_bump_screen_revision( 'options/privacy' );
+}
+
+/**
+ * Bumps the Network Settings screen's revision when it is saved.
+ *
+ * @since 0.10.0
+ */
+function wp_presence_on_update_network_options() {
+	if ( ! wp_presence_is_admin_screen_save() ) {
+		return;
+	}
+	wp_presence_bump_screen_revision( 'network/settings' );
+}
+
+/**
+ * Bumps an Edit Site → Info screen's revision when the site is updated.
+ *
+ * Skips `last_updated`-only updates, which core writes on every publish,
+ * unless they come from the Info screen, where the field is editable.
+ *
+ * @since 0.10.0
+ *
+ * @param WP_Site $new_site Site after the update.
+ * @param WP_Site $old_site Site before the update.
+ */
+function wp_presence_on_update_site( $new_site, $old_site ) {
+	if ( ! wp_presence_is_admin_screen_save() ) {
+		return;
+	}
+	$new_fields = $new_site->to_array();
+	$old_fields = $old_site->to_array();
+	if ( 'site-info.php' !== ( $GLOBALS['pagenow'] ?? '' ) ) {
+		unset( $new_fields['last_updated'], $old_fields['last_updated'] );
+	}
+	if ( $new_fields === $old_fields ) {
+		return;
+	}
+	wp_presence_bump_screen_revision( 'network/site-info/' . (int) $new_site->id );
+}
+
+/**
+ * Bumps an Edit Site → Settings screen's revision when it is saved.
+ *
+ * @since 0.10.0
+ *
+ * @param int $site_id Site ID.
+ */
+function wp_presence_on_update_site_options( $site_id ) {
+	if ( ! wp_presence_is_admin_screen_save() ) {
+		return;
+	}
+	wp_presence_bump_screen_revision( 'network/site-settings/' . (int) $site_id );
+}
+
+/**
+ * Bumps an Edit Site → Themes screen's revision when its allowed themes change.
+ *
+ * Core writes `allowedthemes` while switched to the edited site.
+ *
+ * @since 0.10.0
+ */
+function wp_presence_on_site_allowed_themes_updated() {
+	if ( ! wp_presence_is_admin_screen_save() ) {
+		return;
+	}
+	wp_presence_bump_screen_revision( 'network/site-themes/' . get_current_blog_id() );
+}
+
+/**
+ * Bumps an Edit Site → Users screen's revision when the site's users change.
+ *
+ * Hooked to add_user_to_blog and remove_user_from_blog, which pass the site ID,
+ * and set_user_role, which runs while switched to the site.
+ *
+ * @since 0.10.0
+ *
+ * @param int        $user_id User ID. Unused.
+ * @param int|string $arg2    Site ID for remove_user_from_blog, a role otherwise.
+ * @param mixed      $arg3    Site ID for add_user_to_blog, previous roles for set_user_role.
+ */
+function wp_presence_on_site_users_changed( $user_id, $arg2 = null, $arg3 = null ) {
+	unset( $user_id );
+	if ( ! wp_presence_is_admin_screen_save() ) {
+		return;
+	}
+	if ( 'add_user_to_blog' === current_action() ) {
+		$site_id = (int) $arg3;
+	} elseif ( 'remove_user_from_blog' === current_action() ) {
+		$site_id = (int) $arg2;
+	} elseif ( $arg3 ) {
+		$site_id = get_current_blog_id();
+	} else {
+		// A first role comes from creating a user or add_user_to_blog, which bumps on its own.
+		return;
+	}
+	wp_presence_bump_screen_revision( 'network/site-users/' . $site_id );
+}
+
+/**
  * Checks if the current user has permission to access or edit a given screen.
  *
  * @since 0.1.7
@@ -549,8 +761,17 @@ function wp_presence_on_edit_comment( $comment_id ) {
  * @return bool
  */
 function wp_presence_current_user_can_access_screen( $screen_key ) {
-	if ( 0 === strpos( $screen_key, 'options/' ) ) {
+	if ( 'options/privacy' === $screen_key ) {
+		if ( ! current_user_can( 'manage_privacy_options' ) ) {
+			return false;
+		}
+	} elseif ( 0 === strpos( $screen_key, 'options/' ) ) {
 		if ( ! current_user_can( 'manage_options' ) ) {
+			return false;
+		}
+	} elseif ( 0 === strpos( $screen_key, 'network/' ) ) {
+		$cap = 'network/settings' === $screen_key ? 'manage_network_options' : 'manage_sites';
+		if ( ! is_multisite() || ! current_user_can( $cap ) ) {
 			return false;
 		}
 	} elseif ( preg_match( '#^post/(\d+)$#', $screen_key, $m ) ) {
