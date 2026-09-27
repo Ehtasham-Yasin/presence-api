@@ -89,16 +89,19 @@ function wp_presence_filter_online_users( $query ) {
  * @return array The Heartbeat response.
  */
 function wp_presence_users_list_heartbeat_received( $response, $data, $screen_id = '' ) {
-	$network = 'users-network' === $screen_id;
+	// The screen ID comes from the client, and the network functions only load on multisite.
+	$network = is_multisite() && 'users-network' === $screen_id;
 	$allowed = $network
 		? current_user_can( 'manage_network_users' ) && current_user_can( wp_presence_network_capability() ) && wp_presence_network_aggregation_enabled()
 		: current_user_can( 'list_users' );
 
-	if ( ! $allowed || empty( $data['presence-users-list'] ) || ! is_string( $data['presence-users-list'] ) ) {
+	$query = wp_presence_fragment_request( $data, 'users-list' );
+
+	if ( ! $allowed || empty( $query ) || ! is_string( $query ) ) {
 		return $response;
 	}
 
-	parse_str( ltrim( $data['presence-users-list'], '?' ), $args );
+	parse_str( ltrim( $query, '?' ), $args );
 	if ( ( $args['presence_status'] ?? '' ) !== 'online' || ! is_string( $args['_wpnonce'] ?? null ) || ! wp_verify_nonce( $args['_wpnonce'], 'presence_online_filter' ) ) {
 		return $response;
 	}
@@ -118,10 +121,39 @@ function wp_presence_users_list_heartbeat_received( $response, $data, $screen_id
 
 	list( $_REQUEST, $_GET, $_SERVER['REQUEST_URI'], $GLOBALS['current_screen'] ) = $saved; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash
 
-	$response['presence-users-list'] = array(
-		'rows'  => $rows,
-		'count' => count( $network ? wp_presence_get_network_online_user_ids() : wp_presence_online_user_ids( wp_get_presence( wp_presence_admin_room() ) ) ),
-	);
+	$response['presence-fragments']['users-list'] = $rows;
+
+	return $response;
+}
+
+/**
+ * Sends a fresh count for the Online view link, on every view of a site or network users list that shows it.
+ *
+ * @since 0.11.0
+ *
+ * @param array  $response  Heartbeat response data.
+ * @param array  $data      Data received from the client.
+ * @param string $screen_id The screen ID the heartbeat came from.
+ * @return array The Heartbeat response.
+ */
+function wp_presence_users_online_count_heartbeat_received( $response, $data, $screen_id = '' ) {
+	if ( ! wp_presence_fragment_request( $data, 'users-online-count' ) ) {
+		return $response;
+	}
+
+	// The same checks that decide whether each screen shows the link at all.
+	if ( is_multisite() && 'users-network' === $screen_id ) {
+		if ( ! current_user_can( wp_presence_network_capability() ) || ! wp_presence_network_aggregation_enabled() ) {
+			return $response;
+		}
+		$count = count( wp_presence_get_network_online_user_ids() );
+	} elseif ( 'users' === $screen_id && current_user_can( 'edit_posts' ) ) {
+		$count = count( wp_presence_online_user_ids( wp_get_presence( wp_presence_admin_room() ) ) );
+	} else {
+		return $response;
+	}
+
+	$response['presence-fragments']['users-online-count'] = '(' . $count . ')';
 
 	return $response;
 }

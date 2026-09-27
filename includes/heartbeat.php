@@ -111,7 +111,15 @@ function wp_presence_get_heartbeat_idle_interval() {
  * @since 0.1.1
  */
 function wp_presence_enqueue_heartbeat_ping() {
-	if ( ! is_user_logged_in() || ! current_user_can( 'edit_posts' ) ) {
+	if ( ! is_user_logged_in() ) {
+		return;
+	}
+
+	if ( ! current_user_can( 'edit_posts' ) ) {
+		// The network screens' live surfaces answer to the network capability, so load the script without any presence to write.
+		if ( is_network_admin() && current_user_can( wp_presence_network_capability() ) ) {
+			wp_presence_enqueue_ping_script( array() );
+		}
 		return;
 	}
 
@@ -247,6 +255,18 @@ function wp_presence_enqueue_heartbeat_ping() {
 		'ttlMargin'                => wp_presence_ttl_margin(),
 	);
 
+	wp_presence_enqueue_ping_script( $config );
+}
+
+/**
+ * Enqueues the presence ping script, which also keeps the live surfaces current.
+ *
+ * @since 0.11.0
+ *
+ * @access private
+ * @param array $config The `wpPresenceConfig` object.
+ */
+function wp_presence_enqueue_ping_script( $config ) {
 	wp_enqueue_script(
 		'wp-presence-tab-coordinator',
 		WP_PRESENCE_PLUGIN_URL . 'assets/js/tab-coordinator.js',
@@ -601,4 +621,22 @@ function wp_presence_store_collaboration_state( $room, $count, $stored ) {
 		wp_json_encode( array( 'count' => $count ) ),
 		gmdate( 'Y-m-d H:i:s' )
 	);
+}
+
+/**
+ * Returns what the page asked a live surface's Heartbeat feed for.
+ *
+ * Surfaces register in presence-ping.js and ask under `presence-fragments`,
+ * each by its key; the feed answers with HTML under the same key.
+ *
+ * @access private
+ *
+ * @since 0.11.0
+ *
+ * @param array  $data Data received from the client.
+ * @param string $key  The surface key.
+ * @return mixed What the surface sent, or null when it did not ask.
+ */
+function wp_presence_fragment_request( $data, $key ) {
+	return $data['presence-fragments'][ $key ] ?? null;
 }

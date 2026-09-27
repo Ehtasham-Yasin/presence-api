@@ -164,19 +164,30 @@ class WP_Test_Presence_User_List extends WP_Presence_UnitTestCase {
 
 		$query = '?presence_status=online&_wpnonce=' . ( $nonce ?? wp_create_nonce( 'presence_online_filter' ) );
 
-		return wp_presence_users_list_heartbeat_received( array(), array( 'presence-users-list' => $query ) );
+		return wp_presence_users_list_heartbeat_received( array(), array( 'presence-fragments' => array( 'users-list' => $query ) ) );
 	}
 
 	public function test_the_online_view_gets_fresh_rows_each_heartbeat() {
 		wp_set_presence( wp_presence_admin_room(), 'client-1', array(), self::$editor_id );
 
-		$list = $this->tick_online_view()['presence-users-list'];
+		$rows = $this->tick_online_view()['presence-fragments']['users-list'];
 
-		$this->assertStringContainsString( "id='user-" . self::$editor_id . "'", $list['rows'] );
-		$this->assertStringNotContainsString( "id='user-" . self::$subscriber_id . "'", $list['rows'] );
-		$this->assertStringContainsString( 'wp_http_referer=%2Fwp-admin%2Fusers.php%3Fpresence_status%3Donline', $list['rows'] );
-		$this->assertSame( 2, $list['count'] );
+		$this->assertStringContainsString( "id='user-" . self::$editor_id . "'", $rows );
+		$this->assertStringNotContainsString( "id='user-" . self::$subscriber_id . "'", $rows );
+		$this->assertStringContainsString( 'wp_http_referer=%2Fwp-admin%2Fusers.php%3Fpresence_status%3Donline', $rows );
 		$this->assertArrayNotHasKey( 'presence_status', $_GET );
+	}
+
+	/**
+	 * @covers ::wp_presence_users_online_count_heartbeat_received
+	 */
+	public function test_every_users_view_gets_a_fresh_online_count() {
+		wp_set_current_user( self::$editor_id );
+		wp_set_presence( wp_presence_admin_room(), 'client-1', array(), self::$editor_id );
+		$ask = array( 'presence-fragments' => array( 'users-online-count' => true ) );
+
+		$this->assertSame( '(1)', wp_presence_users_online_count_heartbeat_received( array(), $ask, 'users' )['presence-fragments']['users-online-count'] );
+		$this->assertSame( array(), wp_presence_users_online_count_heartbeat_received( array(), $ask, 'users-network' ) );
 	}
 
 	public function test_the_online_view_needs_its_nonce() {
