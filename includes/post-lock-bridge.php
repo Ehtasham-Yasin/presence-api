@@ -103,7 +103,10 @@ function wp_presence_post_lock_room( $post_id, $meta_key ) {
 		return false;
 	}
 
-	return wp_presence_post_room( $post_id );
+	$post = get_post( $post_id );
+
+	// Core locks posts of every type, so this covers types without presence support too.
+	return $post ? 'postType/' . $post->post_type . ':' . $post->ID : false;
 }
 
 /**
