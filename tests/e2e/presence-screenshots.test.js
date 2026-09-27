@@ -40,6 +40,26 @@ function demoSeeder( php ) {
 	wpCli( `eval 'require "${ SEEDER_PATH }"; ${ php }'` );
 }
 
+/**
+ * Empties the presence table under whatever prefix the site uses.
+ */
+function clearPresence() {
+	wpCli(
+		`eval 'global $wpdb; $wpdb->query( "TRUNCATE TABLE {$wpdb->presence}" );'`
+	);
+}
+
+/**
+ * Ages the seeded editor rows one second past a threshold the plugin reports, as if they were last written then.
+ *
+ * @param {string} seconds PHP expression for the threshold, in seconds.
+ */
+function backdateEditors( seconds ) {
+	wpCli(
+		`eval 'global $wpdb; $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->presence} SET date_gmt = %s, expires_gmt = %s WHERE room LIKE %s AND client_id LIKE %s", gmdate( "Y-m-d H:i:s", $t = time() - ${ seconds } - 1 ), gmdate( "Y-m-d H:i:s", $t + wp_presence_get_timeout() ), "postType/%", "editor-%" ) );'`
+	);
+}
+
 async function snap( page, name ) {
 	fs.mkdirSync( SCREENSHOTS_DIR, { recursive: true } );
 	await page.screenshot( {
@@ -77,7 +97,7 @@ const test = base.extend( {} );
 test.describe.serial( 'Presence Screenshots', () => {
 	test.beforeAll( () => {
 		demoSeeder( 'wp_presence_demo_cleanup();' );
-		wpCli( 'db query "TRUNCATE TABLE wp_presence"' );
+		clearPresence();
 	} );
 
 	test.afterAll( () => {
@@ -85,7 +105,7 @@ test.describe.serial( 'Presence Screenshots', () => {
 	} );
 
 	test( '01 — Empty state', async ( { admin, page } ) => {
-		wpCli( 'db query "TRUNCATE TABLE wp_presence"' );
+		clearPresence();
 		await admin.visitAdminPage( '/' );
 		await connectHeartbeat( page );
 
@@ -126,7 +146,7 @@ test.describe.serial( 'Presence Screenshots', () => {
 
 	test( '03 — Active users (20)', async ( { admin, page } ) => {
 		demoSeeder( 'wp_presence_demo_cleanup();' );
-		wpCli( 'db query "TRUNCATE TABLE wp_presence"' );
+		clearPresence();
 		demoSeeder( 'wp_presence_demo_seed( 20 );' );
 		await admin.visitAdminPage( '/' );
 		await connectHeartbeat( page );
@@ -152,9 +172,7 @@ test.describe.serial( 'Presence Screenshots', () => {
 	} );
 
 	test( '06 — Idle state', async ( { admin, page } ) => {
-		wpCli(
-			"db query \"UPDATE wp_presence SET date_gmt = DATE_SUB( UTC_TIMESTAMP(), INTERVAL 76 SECOND ) WHERE room LIKE 'postType/%' AND client_id LIKE 'editor-%'\""
-		);
+		backdateEditors( 'wp_presence_idle_threshold()' );
 		await admin.visitAdminPage( '/' );
 		await connectHeartbeat( page );
 		await expect(
@@ -170,11 +188,14 @@ test.describe.serial( 'Presence Screenshots', () => {
 	} );
 
 	test( '07 — Expired (back to empty)', async ( { admin, page } ) => {
-		wpCli(
-			"db query \"UPDATE wp_presence SET date_gmt = DATE_SUB( UTC_TIMESTAMP(), INTERVAL 151 SECOND ) WHERE room LIKE 'postType/%' AND client_id LIKE 'editor-%'\""
-		);
+		backdateEditors( 'wp_presence_get_timeout()' );
 		await admin.visitAdminPage( '/' );
 		await connectHeartbeat( page );
+		await expect(
+			page.locator(
+				'#presence-active-posts-list .presence-active-post-item'
+			)
+		).toHaveCount( 0 );
 
 		await snap( page, '07-expired-dashboard' );
 		demoSeeder( 'wp_presence_demo_cleanup();' );
