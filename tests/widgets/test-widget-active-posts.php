@@ -30,7 +30,7 @@ class WP_Test_Presence_Widget_Active_Posts extends WP_Presence_UnitTestCase {
 	/**
 	 * Runs the widget's data query.
 	 *
-	 * @return array The posts being edited, as the widget draws them.
+	 * @return array The posts people have open, as the widget draws them.
 	 */
 	private function active_posts() {
 		$method = new ReflectionMethod( WP_Presence_Widget_Active_Posts::class, 'build_active_posts_data' );
@@ -401,5 +401,22 @@ class WP_Test_Presence_Widget_Active_Posts extends WP_Presence_UnitTestCase {
 
 		$this->assertStringContainsString( '2 people', $html );
 		$this->assertStringContainsString( '<span class="presence-status-text">Idle</span>', $html );
+	}
+
+	/**
+	 * @covers WP_Presence_Widget_Active_Posts::build_active_posts_data
+	 */
+	public function test_only_the_lock_holder_is_currently_editing() {
+		wp_set_current_user( self::$editor_id );
+
+		$room = wp_presence_post_room( self::$post_id );
+		wp_set_presence( $room, 'editor-' . self::$editor2_id, array(), self::$editor2_id );
+		wp_set_presence( $room, 'editor-' . self::$editor_id, array(), self::$editor_id );
+		wp_set_post_lock( self::$post_id );
+
+		$posts = $this->active_posts();
+
+		$this->assertSame( get_userdata( self::$editor_id )->display_name . ' is currently editing, 1 other · Post', $posts[0]['editor_label'] );
+		$this->assertSame( self::$editor_id, $posts[0]['editors'][0]['user_id'] );
 	}
 }

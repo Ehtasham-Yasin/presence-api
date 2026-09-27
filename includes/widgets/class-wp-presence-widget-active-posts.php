@@ -12,7 +12,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Handles the "Active Posts" dashboard widget with Heartbeat integration.
  *
- * Shows which posts are currently being edited, grouped by post with
+ * Shows which posts people have open, grouped by post with
  * an avatar stack of editors.
  *
  * @since 0.1.1
@@ -105,7 +105,7 @@ class WP_Presence_Widget_Active_Posts {
 			return '<p>' . esc_html__( 'All quiet.', 'presence-api' ) . '</p>';
 		}
 
-		$html = '<ul class="presence-active-posts-list" aria-label="' . esc_attr__( 'Posts currently being edited', 'presence-api' ) . '">';
+		$html = '<ul class="presence-active-posts-list" aria-label="' . esc_attr__( 'Posts people have open', 'presence-api' ) . '">';
 
 		foreach ( $posts as $post_data ) {
 			$any_active = false;
@@ -169,10 +169,11 @@ class WP_Presence_Widget_Active_Posts {
 	 * Builds active posts data grouped by post.
 	 *
 	 * Returns an array of posts, each with an 'editors' array containing
-	 * the users currently editing that post.
+	 * the users who have that post open.
 	 *
 	 * @since 0.1.1
 	 * @since 0.11.0 Adds the post type to each editor label and titles untitled posts "(no title)".
+	 * @since 0.11.0 Labels the post's lock holder with core's "is currently editing".
 	 *
 	 * @return array Array of post data with grouped editors.
 	 */
@@ -273,21 +274,42 @@ class WP_Presence_Widget_Active_Posts {
 			}
 		);
 
+		wp_presence_prime_post_locks( wp_list_pluck( $by_post, 'post_id' ) );
+
+		/** This filter is documented in wp-admin/includes/ajax-actions.php */
+		$window = (int) apply_filters( 'wp_check_post_lock_window', 150 );
+
 		// Keyed by user id above; hand back a list.
 		foreach ( $by_post as $index => $post_data ) {
-			$editors = array_values( $post_data['editors'] );
-			$count   = count( $editors );
+			$lock    = explode( ':', (string) get_post_meta( $post_data['post_id'], '_edit_lock', true ) );
+			$holder  = isset( $lock[1] ) && (int) $lock[0] > time() - $window ? (int) $lock[1] : 0;
+			$editors = $post_data['editors'];
+			$parts   = array();
 
-			$editor_label = 1 === $count
-				? $editors[0]['display_name']
-				/* translators: %d: Number of people editing the post. */
-				: sprintf( _n( '%d person', '%d people', $count, 'presence-api' ), $count );
+			// Only the lock holder can change the post, so only they get core's wording for a lock.
+			if ( isset( $editors[ $holder ] ) ) {
+				/* translators: %s: User's display name. */
+				$parts[] = sprintf( __( '%s is currently editing', 'presence-api' ), $editors[ $holder ]['display_name'] );
+				$editors = array( $holder => $editors[ $holder ] ) + $editors;
+			}
 
-			$by_post[ $index ]['editors']      = $editors;
+			$others = count( $editors ) - count( $parts );
+
+			if ( $parts && $others ) {
+				/* translators: %d: Number of other people with the post open. */
+				$parts[] = sprintf( _n( '%d other', '%d others', $others, 'presence-api' ), $others );
+			} elseif ( 1 === $others ) {
+				$parts[] = reset( $editors )['display_name'];
+			} elseif ( $others ) {
+				/* translators: %d: Number of people with the post open. */
+				$parts[] = sprintf( _n( '%d person', '%d people', $others, 'presence-api' ), $others );
+			}
+
+			$by_post[ $index ]['editors']      = array_values( $editors );
 			$by_post[ $index ]['editor_label'] = sprintf(
-				/* translators: 1: Who is editing, a name or a count of people. 2: Singular post type name, such as Page. */
+				/* translators: 1: Who has the post open. 2: Singular post type name, such as Page. */
 				__( '%1$s · %2$s', 'presence-api' ),
-				$editor_label,
+				implode( wp_get_list_item_separator(), $parts ),
 				get_post_type_object( $post_data['post_type'] )->labels->singular_name
 			);
 		}
