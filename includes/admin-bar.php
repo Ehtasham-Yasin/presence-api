@@ -13,8 +13,9 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Adds a presence indicator to the admin bar showing online users.
  *
  * @param WP_Admin_Bar $wp_admin_bar The admin bar instance.
+ * @param string|null  $screen       The screen to group by, when not rendering the current page.
  */
-function wp_presence_admin_bar_node( $wp_admin_bar ) {
+function wp_presence_admin_bar_node( $wp_admin_bar, $screen = null ) {
 	if ( ! is_user_logged_in() || ! current_user_can( 'edit_posts' ) ) {
 		return;
 	}
@@ -30,42 +31,14 @@ function wp_presence_admin_bar_node( $wp_admin_bar ) {
 		}
 	);
 
-	/*
-	 * Determine the current screen slug to match against what the JS heartbeat
-	 * sends as window.pagenow. Map $pagenow -> pagenow values.
-	 */
-	global $pagenow;
-	$pagenow_map = array(
-		'index.php'              => 'dashboard',
-		'edit.php'               => 'edit',
-		'post.php'               => 'post',
-		'post-new.php'           => 'post-new',
-		'upload.php'             => 'upload',
-		'edit-comments.php'      => 'edit-comments',
-		'themes.php'             => 'themes',
-		'widgets.php'            => 'widgets',
-		'nav-menus.php'          => 'nav-menus',
-		'plugins.php'            => 'plugins',
-		'users.php'              => 'users',
-		'profile.php'            => 'profile',
-		'user-edit.php'          => 'user-edit',
-		'tools.php'              => 'tools',
-		'import.php'             => 'import',
-		'export.php'             => 'export',
-		'options-general.php'    => 'options-general',
-		'options-writing.php'    => 'options-writing',
-		'options-reading.php'    => 'options-reading',
-		'options-discussion.php' => 'options-discussion',
-		'options-media.php'      => 'options-media',
-		'options-permalink.php'  => 'options-permalink',
-	);
-
-	if ( ! is_admin() ) {
+	// The ping reports window.pagenow, which core prints from the current screen's ID.
+	if ( null !== $screen ) {
+		$current_screen = $screen;
+	} elseif ( ! is_admin() ) {
 		$current_screen = 'front';
-	} elseif ( isset( $pagenow_map[ $pagenow ] ) ) {
-		$current_screen = $pagenow_map[ $pagenow ];
 	} else {
-		$current_screen = $pagenow ? str_replace( '.php', '', $pagenow ) : 'unknown';
+		$wp_screen      = get_current_screen();
+		$current_screen = $wp_screen ? $wp_screen->id : 'unknown';
 	}
 
 	// Split others into "here" (same screen) and "elsewhere".
@@ -288,6 +261,63 @@ function wp_presence_admin_bar_node( $wp_admin_bar ) {
 			'href'   => wp_nonce_url( admin_url( 'users.php?presence_status=online' ), 'presence_online_filter' ),
 		)
 	);
+}
+
+/**
+ * Renders the admin bar presence node on its own, for the heartbeat to swap in.
+ *
+ * @since 0.9.0
+ *
+ * @param string $screen The screen the heartbeat came from.
+ * @return string The node's list item markup, or an empty string.
+ */
+function wp_presence_admin_bar_node_markup( $screen ) {
+	require_once ABSPATH . 'wp-includes/class-wp-admin-bar.php';
+
+	// Core only renders the whole bar, so a subclass reaches its item renderer.
+	$bar = new class() extends WP_Admin_Bar {
+		/**
+		 * Renders one top-level node.
+		 *
+		 * @param string $id Node ID.
+		 * @return string
+		 */
+		public function render_node( $id ) {
+			// Fetched first; _bind() fills in its children and then hides every node.
+			$node = $this->_get_node( $id );
+			if ( ! $node ) {
+				return '';
+			}
+			$this->_bind();
+			ob_start();
+			$this->_render_item( $node );
+			return (string) ob_get_clean();
+		}
+	};
+
+	$bar->add_group( array( 'id' => 'top-secondary' ) );
+	wp_presence_admin_bar_node( $bar, $screen );
+
+	return $bar->render_node( 'presence-online' );
+}
+
+/**
+ * Sends a fresh admin bar presence node with each heartbeat that asks for one.
+ *
+ * @since 0.9.0
+ *
+ * @param array $response Heartbeat response data.
+ * @param array $data     Data received from the client.
+ * @return array
+ */
+function wp_presence_admin_bar_heartbeat_received( $response, $data ) {
+	if ( empty( $data['presence-admin-bar'] ) || empty( $data['presence-ping']['screen'] ) || ! current_user_can( 'edit_posts' ) ) {
+		return $response;
+	}
+
+	$response['presence-admin-bar'] = wp_presence_admin_bar_node_markup( sanitize_text_field( $data['presence-ping']['screen'] ) );
+
+	return $response;
 }
 
 /**
