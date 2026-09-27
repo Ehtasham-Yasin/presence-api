@@ -75,7 +75,10 @@ function wp_presence_admin_bar_node( $wp_admin_bar, $screen = null ) {
 	$place = function ( $entry ) use ( $user_editing_post ) {
 		$screen  = isset( $entry->data['screen'] ) ? (string) $entry->data['screen'] : '';
 		$post_id = 'front' === $screen ? (int) ( $entry->data['post_id'] ?? 0 ) : (int) ( $user_editing_post[ (int) $entry->user_id ] ?? 0 );
-		return $post_id && ( 'front' === $screen || get_post_type( $post_id ) === $screen ) ? $screen . ':' . $post_id : $screen;
+		if ( $post_id && ( 'front' === $screen || get_post_type( $post_id ) === $screen ) ) {
+			return $screen . ':' . $post_id;
+		}
+		return empty( $entry->data['object_id'] ) ? $screen : $screen . ':' . (int) $entry->data['object_id'];
 	};
 
 	$own        = wp_list_filter( $entries, array( 'user_id' => $current_uid ) );
@@ -102,6 +105,26 @@ function wp_presence_admin_bar_node( $wp_admin_bar, $screen = null ) {
 
 	cache_users( wp_list_pluck( $entries, 'user_id' ) );
 
+	// Each row's capability check reads its comment and post or its term, so prime in one go.
+	$comment_ids = array();
+	$term_ids    = array();
+	foreach ( $elsewhere as $entry ) {
+		$object_id = (int) ( $entry->data['object_id'] ?? 0 );
+		$on        = (string) ( $entry->data['screen'] ?? '' );
+		if ( $object_id > 0 && 'comment' === $on ) {
+			$comment_ids[] = $object_id;
+		} elseif ( $object_id > 0 && 0 === strpos( $on, 'edit-' ) ) {
+			$term_ids[] = $object_id;
+		}
+	}
+	if ( $comment_ids ) {
+		_prime_comment_caches( array_unique( $comment_ids ), false );
+		_prime_post_caches( array_unique( array_map( 'intval', wp_list_pluck( array_filter( array_map( 'get_comment', $comment_ids ) ), 'comment_post_ID' ) ) ), false, false );
+	}
+	if ( $term_ids ) {
+		_prime_term_caches( array_unique( $term_ids ), false );
+	}
+
 	$by_name = function ( $a, $b ) {
 		$user_a = get_userdata( $a->user_id );
 		$user_b = get_userdata( $b->user_id );
@@ -116,10 +139,11 @@ function wp_presence_admin_bar_node( $wp_admin_bar, $screen = null ) {
 			return array( '', '' );
 		}
 
-		$title   = isset( $entry->data['title'] ) ? (string) $entry->data['title'] : '';
-		$post_id = (int) ( $user_editing_post[ (int) $entry->user_id ] ?? 0 );
-		$type    = substr( $screen, 5 );
-		$path    = null;
+		$title     = isset( $entry->data['title'] ) ? (string) $entry->data['title'] : '';
+		$post_id   = (int) ( $user_editing_post[ (int) $entry->user_id ] ?? 0 );
+		$object_id = wp_presence_screen_object_id( $screen, $entry->data['object_id'] ?? 0 );
+		$type      = substr( $screen, 5 );
+		$path      = null;
 
 		if ( 'front' === $screen ) {
 			$post_id = (int) ( $entry->data['post_id'] ?? 0 );
@@ -128,7 +152,21 @@ function wp_presence_admin_bar_node( $wp_admin_bar, $screen = null ) {
 			}
 			return current_user_can( 'read_post', $post_id ) ? array( $title, get_permalink( $post_id ) ) : array( '', '' );
 		} elseif ( $post_id && get_post_type( $post_id ) === $screen ) {
-			return array( get_the_title( $post_id ), (string) get_edit_post_link( $post_id, 'raw' ), true );
+			$post_title = get_the_title( $post_id );
+			// phpcs:ignore WordPress.WP.I18n.TextDomainMismatch -- Reuses core's string, as _draft_or_post_title() does.
+			return array( '' !== $post_title ? $post_title : __( '(no title)', 'default' ), (string) get_edit_post_link( $post_id, 'raw' ), true );
+		} elseif ( $object_id && 'comment' === $screen ) {
+			return array( $title, (string) get_edit_comment_link( $object_id, 'url' ) );
+		} elseif ( $object_id && 'user-edit' === $screen ) {
+			return array( $title, get_edit_user_link( $object_id ) );
+		} elseif ( $object_id && 'user-edit-network' === $screen ) {
+			return array( $title, network_admin_url( 'user-edit.php?user_id=' . $object_id ) );
+		} elseif ( $object_id ) {
+			return array( get_term( $object_id, $type )->name, (string) get_edit_term_link( $object_id, $type ) );
+		} elseif ( ! empty( $entry->data['object_id'] ) ) {
+			// The user editor's title names the user, so it is only shown to people who can edit them.
+			// phpcs:ignore WordPress.WP.I18n.TextDomainMismatch -- Reuses core's string.
+			return array( in_array( $screen, array( 'user-edit', 'user-edit-network' ), true ) ? __( 'Edit User', 'default' ) : $title, '' );
 		} elseif ( 'dashboard' === $screen ) {
 			$path = '';
 		} elseif ( preg_match( '/_page_(.+)$/', $screen, $matches ) ) {

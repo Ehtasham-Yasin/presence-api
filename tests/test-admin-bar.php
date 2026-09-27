@@ -10,6 +10,7 @@
  * @covers ::wp_presence_admin_bar_assets
  * @covers ::wp_presence_admin_bar_node_markup
  * @covers ::wp_presence_admin_bar_heartbeat_received
+ * @covers ::wp_presence_screen_object_id
  */
 class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 
@@ -288,6 +289,76 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 		$this->assertSame( 'Secret Draft', $place->title );
 	}
 
+	public function test_someone_editing_an_untitled_draft_is_on_no_title() {
+		$this->put_editor_on_post( self::factory()->post->create( array( 'post_title' => '', 'post_status' => 'draft', 'post_author' => self::$editor_id ) ) );
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$this->assertSame( '(no title)', $this->place_of( $this->render_nodes(), self::$editor_id )->title );
+	}
+
+	/**
+	 * @dataProvider data_objects_being_edited
+	 */
+	public function test_someone_editing_a_comment_user_or_term_links_to_it( $screen, $object, $title ) {
+		$object_id = 'comment' === $screen ? self::factory()->comment->create() : ( 0 === strpos( $screen, 'user-edit' ) ? self::$editor_id : self::factory()->category->create( array( 'name' => 'Recipes' ) ) );
+		$this->put_user_on_screen( $screen, array( 'title' => 'Somewhere', 'object_id' => $object_id ) );
+
+		$admin_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		// Only a super admin can edit other users on a network.
+		grant_super_admin( $admin_id );
+		wp_set_current_user( $admin_id );
+		$row = $this->render_nodes()['presence-place-0'];
+
+		$this->assertSame( call_user_func( $object, $object_id ), $row->href );
+		$this->assertStringContainsString( '>' . $title . '</span>', $row->title );
+	}
+
+	public function data_objects_being_edited() {
+		return array(
+			'comment' => array( 'comment', fn( $id ) => get_edit_comment_link( $id, 'url' ), 'Somewhere' ),
+			'user'    => array( 'user-edit', 'get_edit_user_link', 'Somewhere' ),
+			'network' => array( 'user-edit-network', fn( $id ) => network_admin_url( 'user-edit.php?user_id=' . $id ), 'Somewhere' ),
+			'term'    => array( 'edit-category', fn( $id ) => get_edit_term_link( $id, 'category' ), 'Recipes' ),
+		);
+	}
+
+	public function test_more_comments_and_terms_being_edited_cost_no_more_queries() {
+		global $wpdb;
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$queries = array();
+		for ( $i = 0; $i < 2; $i++ ) {
+			for ( $j = 0; $j < 3; $j++ ) {
+				$this->put_user_on_screen( 'comment', array( 'object_id' => self::factory()->comment->create( array( 'comment_post_ID' => self::factory()->post->create() ) ) ) );
+				$this->put_user_on_screen( 'edit-category', array( 'object_id' => self::factory()->category->create() ) );
+			}
+			wp_cache_flush();
+			$before = $wpdb->num_queries;
+			$this->render_nodes();
+			$queries[] = $wpdb->num_queries - $before;
+		}
+
+		$this->assertSame( $queries[0], $queries[1] );
+	}
+
+	public function test_a_user_or_term_you_cannot_edit_is_not_named_or_linked() {
+		$admin_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$on_user  = $this->put_user_on_screen( 'user-edit', array( 'title' => 'Edit User Admin', 'object_id' => $admin_id ) );
+		$on_term  = $this->put_user_on_screen( 'edit-category', array( 'title' => 'Edit Category', 'object_id' => self::factory()->category->create() ) );
+		$on_net   = $this->put_user_on_screen( 'user-edit-network', array( 'title' => 'Edit User Admin', 'object_id' => $admin_id ) );
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'contributor' ) ) );
+		$this->let_current_user_list_users();
+		$nodes = $this->render_nodes();
+
+		$this->assertSame( 'Edit User', $this->place_of( $nodes, $on_user )->title );
+		$this->assertFalse( $this->place_of( $nodes, $on_user )->href );
+		$this->assertSame( 'Edit Category', $this->place_of( $nodes, $on_term )->title );
+		$this->assertFalse( $this->place_of( $nodes, $on_term )->href );
+		$this->assertSame( 'Edit User', $this->place_of( $nodes, $on_net )->title );
+	}
+
 	public function test_people_on_this_page_show_when_they_are_idle() {
 		$this->view_admin_page( 'upload.php', 'upload' );
 
@@ -321,6 +392,26 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 		wp_remove_presence( wp_presence_post_room( $other_post ), 'lock-' . $me );
 
 		$this->assertSame( 'presence-online', $this->render_nodes()[ 'presence-user-' . self::$editor_id ]->parent );
+	}
+
+	/**
+	 * A term's editor shares its screen ID with the list of terms.
+	 */
+	public function test_people_on_the_term_list_or_another_term_are_not_on_this_term() {
+		$term_id = self::factory()->category->create();
+		$this->view_admin_page( 'term.php', 'edit-category' );
+
+		$on_list  = $this->put_user_on_screen( 'edit-category' );
+		$on_other = $this->put_user_on_screen( 'edit-category', array( 'object_id' => $term_id + 1 ) );
+		$on_term  = $this->put_user_on_screen( 'edit-category', array( 'object_id' => $term_id ) );
+
+		wp_set_current_user( self::$editor_id );
+		wp_set_presence( 'admin/online', 'user-' . self::$editor_id, array( 'screen' => 'edit-category', 'object_id' => $term_id ), self::$editor_id );
+		$nodes = $this->render_nodes();
+
+		$this->assertSame( 'presence-online', $nodes[ 'presence-user-' . $on_term ]->parent );
+		$this->assertSame( 'presence-elsewhere', $nodes[ 'presence-user-' . $on_list ]->parent );
+		$this->assertSame( 'presence-elsewhere', $nodes[ 'presence-user-' . $on_other ]->parent );
 	}
 
 	public function test_readers_of_another_page_are_not_on_this_page() {
