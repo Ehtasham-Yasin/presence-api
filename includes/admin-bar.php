@@ -225,10 +225,14 @@ function wp_presence_admin_bar_node( $wp_admin_bar ) {
 		}
 	}
 
-	// Where others are is for people who can browse the site's users; the rest see only who shares their page.
-	$can_list_users = current_user_can( 'list_users' );
+	$elsewhere = array_filter(
+		$elsewhere,
+		function ( $entry ) {
+			return current_user_can( 'view_presence_location', $entry->user_id );
+		}
+	);
 
-	if ( $can_list_users && ! empty( $elsewhere ) ) {
+	if ( ! empty( $elsewhere ) ) {
 		$add_section( 'elsewhere', __( 'Elsewhere', 'presence-api' ) );
 
 		$shown = 0;
@@ -242,7 +246,7 @@ function wp_presence_admin_bar_node( $wp_admin_bar ) {
 			if ( ! $user ) {
 				continue;
 			}
-			$screen       = isset( $entry->data['screen'] ) ? $entry->data['screen'] : '';
+			$screen       = wp_presence_get_entry_screen( $entry );
 			$entry_ps     = isset( $entry->data['post_status'] ) ? $entry->data['post_status'] : '';
 			$screen_label = $screen ? WP_Presence_Widget_Whos_Online::get_rich_screen_label( $screen, $entry_ps ) : '';
 			$screen_url   = $screen ? WP_Presence_Widget_Whos_Online::get_screen_url( $screen ) : false;
@@ -270,7 +274,8 @@ function wp_presence_admin_bar_node( $wp_admin_bar ) {
 		}
 	}
 
-	if ( ! $can_list_users ) {
+	// The footer links to the Users list.
+	if ( ! current_user_can( 'list_users' ) ) {
 		return;
 	}
 

@@ -888,6 +888,47 @@ function wp_presence_parse_room( $room ) {
 }
 
 /**
+ * Maps the capability to see which screen a user is on.
+ *
+ * Anyone may see their own; others need `list_users`, since where people are is user-directory information.
+ *
+ * @since 0.9.0
+ *
+ * @param string[] $caps    Primitive capabilities the user must have.
+ * @param string   $cap     Capability being checked.
+ * @param int      $user_id The user ID being checked.
+ * @param array    $args    The user whose location is being viewed, at index 0.
+ * @return string[] Primitive capabilities the user must have.
+ */
+function wp_presence_map_meta_cap( $caps, $cap, $user_id, $args ) {
+	if ( 'view_presence_location' !== $cap ) {
+		return $caps;
+	}
+
+	if ( $user_id && isset( $args[0] ) && (int) $args[0] === (int) $user_id ) {
+		return array();
+	}
+
+	return array( 'list_users' );
+}
+
+/**
+ * Returns the screen an entry's user is on, if the current user may see it.
+ *
+ * @since 0.9.0
+ *
+ * @param object $entry Presence entry from wp_get_presence().
+ * @return string The screen ID, or an empty string.
+ */
+function wp_presence_get_entry_screen( $entry ) {
+	if ( ! isset( $entry->data['screen'] ) || ! current_user_can( 'view_presence_location', $entry->user_id ) ) {
+		return '';
+	}
+
+	return (string) $entry->data['screen'];
+}
+
+/**
  * Checks if a user can access a presence room.
  *
  * @param string $room    The room identifier.
