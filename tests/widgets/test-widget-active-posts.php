@@ -60,6 +60,39 @@ class WP_Test_Presence_Widget_Active_Posts extends WP_Presence_UnitTestCase {
 	}
 
 	/**
+	 * @dataProvider data_untitled_posts
+	 */
+	public function test_rows_name_the_post_type_and_untitled_posts( $post_title, $post_status ) {
+		wp_set_current_user( self::$editor_id );
+
+		$page_id = self::factory()->post->create(
+			array(
+				'post_title'  => $post_title,
+				'post_type'   => 'page',
+				'post_status' => $post_status,
+			)
+		);
+		wp_set_presence( wp_presence_post_room( $page_id ), 'lock-' . self::$editor_id, array(), self::$editor_id );
+
+		$response = WP_Presence_Widget_Active_Posts::heartbeat_received(
+			array(),
+			array( 'presence-active-posts-ping' => true ),
+			'dashboard'
+		);
+
+		$post_entry = $response['presence-active-posts'][0];
+		$this->assertSame( '(no title)', $post_entry['post_title'] );
+		$this->assertSame( get_userdata( self::$editor_id )->display_name . ' · Page', $post_entry['editor_label'] );
+	}
+
+	public function data_untitled_posts() {
+		return array(
+			'draft without a title' => array( '', 'draft' ),
+			'unsaved new post'      => array( 'Auto Draft', 'auto-draft' ),
+		);
+	}
+
+	/**
 	 * @covers WP_Presence_Widget_Active_Posts::heartbeat_received
 	 */
 	public function test_heartbeat_received_ignores_without_ping() {

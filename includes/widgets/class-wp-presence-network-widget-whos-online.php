@@ -120,16 +120,27 @@ class WP_Presence_Network_Widget_Whos_Online {
 	 * network this read is the one that has to stay cheap.
 	 *
 	 * @since 0.2.0
+	 * @since 0.11.0 Names each site by its title and links it to its settings, as the Sites list does.
 	 *
-	 * @return array See wp_presence_get_network_summary().
+	 * @return array See wp_presence_get_network_summary(), plus each site's `name` and `edit_url`.
 	 */
 	private static function get_summary() {
-		return wp_presence_get_network_summary(
+		$summary = wp_presence_get_network_summary(
 			array(
 				'sites'          => self::VISIBLE_SITES,
 				'users_per_site' => WP_PRESENCE_NETWORK_AVATARS,
 			)
 		);
+
+		foreach ( $summary['sites'] as $index => $site ) {
+			// Stored HTML-escaped, so decoded here for the escaping on output.
+			$name = trim( wp_specialchars_decode( get_site( $site['blog_id'] )->blogname, ENT_QUOTES ) );
+
+			$summary['sites'][ $index ]['name']     = '' !== $name ? $name : untrailingslashit( $site['domain'] . $site['path'] );
+			$summary['sites'][ $index ]['edit_url'] = network_admin_url( 'site-info.php?id=' . $site['blog_id'] );
+		}
+
+		return $summary;
 	}
 
 	/**
@@ -167,7 +178,7 @@ class WP_Presence_Network_Widget_Whos_Online {
 		foreach ( $summary['sites'] as $site ) {
 			echo '<li class="presence-site-item" data-blog-id="' . (int) $site['blog_id'] . '">';
 			echo wp_kses_post( wp_presence_render_avatar_stack( $site['users'], WP_PRESENCE_NETWORK_AVATARS ) );
-			echo '<span class="presence-site-info"><a href="' . esc_url( $site['url'] ) . '">' . esc_html( $site['domain'] . $site['path'] ) . '</a></span>';
+			echo '<span class="presence-site-info"><a href="' . esc_url( $site['edit_url'] ) . '">' . esc_html( $site['name'] ) . '</a></span>';
 			echo '<span class="presence-site-count">' . (int) $site['user_count'] . '</span>';
 			echo '</li>';
 		}
