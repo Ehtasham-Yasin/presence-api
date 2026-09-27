@@ -45,6 +45,19 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 	}
 
 	/**
+	 * Lets the current user see where everyone else is, which takes list_users.
+	 */
+	private function let_current_user_list_users() {
+		add_filter(
+			'user_has_cap',
+			static function ( $allcaps ) {
+				$allcaps['list_users'] = true;
+				return $allcaps;
+			}
+		);
+	}
+
+	/**
 	 * Puts the editor online on the post editing screen for a given post.
 	 *
 	 * @param int $post_id The post the editor is working on.
@@ -153,6 +166,7 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 		$this->put_editor_on_post( self::$post_id );
 
 		wp_set_current_user( self::$contributor_id );
+		$this->let_current_user_list_users();
 		$markup = $this->render_node_markup();
 
 		$editor = get_userdata( self::$editor_id );
@@ -167,6 +181,7 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 
 		$other_editor_id = self::factory()->user->create( array( 'role' => 'editor' ) );
 		wp_set_current_user( $other_editor_id );
+		$this->let_current_user_list_users();
 		$markup = $this->render_node_markup();
 
 		$this->assertStringContainsString( 'Secret Draft', $markup );
@@ -200,14 +215,16 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 	}
 
 	/**
-	 * The count includes you, but the node still hides on your own rather than
-	 * reporting a room of one.
+	 * Alone, the node still shows, so the bar does not shift when someone arrives.
 	 */
-	public function test_no_indicator_when_you_are_the_only_one_online() {
+	public function test_the_node_stays_when_you_are_alone() {
 		wp_set_current_user( self::$editor_id );
 		wp_set_presence( 'admin/online', 'user-' . self::$editor_id, array( 'screen' => 'dashboard' ), self::$editor_id );
 
-		$this->assertSame( array(), $this->render_nodes() );
+		$nodes = $this->render_nodes();
+
+		$this->assertStringContainsString( 'Just you', $nodes['presence-online']->title );
+		$this->assertSame( 'Only you are online', $nodes['presence-online']->meta['aria-label'] );
 	}
 
 	public function test_no_indicator_for_a_user_without_edit_posts() {
@@ -237,6 +254,7 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 		$elsewhere = $this->put_user_on_screen( 'edit-comments' );
 
 		wp_set_current_user( self::$editor_id );
+		$this->let_current_user_list_users();
 		$nodes = $this->render_nodes();
 
 		$this->assertArrayHasKey( 'presence-group-here', $nodes );
@@ -341,6 +359,7 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 		}
 
 		wp_set_current_user( self::$editor_id );
+		$this->let_current_user_list_users();
 		$nodes = $this->render_nodes();
 
 		$rows = array_count_values( wp_list_pluck( array_filter( $nodes, fn( $n ) => 0 === strpos( $n->id, 'presence-user-' ) ), 'parent' ) );
@@ -365,6 +384,7 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 		);
 
 		wp_set_current_user( self::$editor_id );
+		$this->let_current_user_list_users();
 		$nodes = $this->render_nodes();
 
 		$node = $nodes[ 'presence-user-' . $user_id ];
@@ -382,6 +402,7 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 		$user_id = $this->put_user_on_screen( 'plugins' );
 
 		wp_set_current_user( self::$editor_id );
+		$this->let_current_user_list_users();
 		$nodes = $this->render_nodes();
 
 		$title = $nodes[ 'presence-user-' . $user_id ]->title;
@@ -447,5 +468,22 @@ class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 		$this->assertSame( '#D94145', wp_presence_avatar_border_color( 1 ) );
 		$this->assertSame( '#D94145', wp_presence_avatar_border_color( 8 ) );
 		$this->assertSame( '#00CFFF', wp_presence_avatar_border_color( 6 ) );
+	}
+
+	/**
+	 * Without list_users you see who shares your page, not where everyone else is.
+	 */
+	public function test_elsewhere_needs_list_users() {
+		$this->view_admin_page( 'upload.php', 'upload' );
+
+		$here      = $this->put_user_on_screen( 'upload' );
+		$elsewhere = $this->put_user_on_screen( 'edit-comments' );
+
+		wp_set_current_user( self::$editor_id );
+		$nodes = $this->render_nodes();
+
+		$this->assertArrayHasKey( 'presence-user-' . $here, $nodes );
+		$this->assertArrayNotHasKey( 'presence-user-' . $elsewhere, $nodes );
+		$this->assertArrayNotHasKey( 'presence-view-all', $nodes );
 	}
 }

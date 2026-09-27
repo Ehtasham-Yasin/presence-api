@@ -22,18 +22,13 @@ function wp_presence_admin_bar_node( $wp_admin_bar ) {
 	$entries     = wp_get_presence( wp_presence_admin_room() );
 	$current_uid = get_current_user_id();
 
-	// The count includes you, the gate does not. A lone user gets no node,
-	// but once anyone else is here the number matches every other surface.
+	// The node stays put when you are alone, so the bar never shifts and presence always shows it is on.
 	$others = array_filter(
 		$entries,
 		function ( $e ) use ( $current_uid ) {
 			return (int) $e->user_id !== $current_uid;
 		}
 	);
-
-	if ( empty( $others ) ) {
-		return;
-	}
 
 	/*
 	 * Determine the current screen slug to match against what the JS heartbeat
@@ -155,6 +150,13 @@ function wp_presence_admin_bar_node( $wp_admin_bar ) {
 
 	/* translators: %d: Number of online users, including the current user. */
 	$label = sprintf( _n( '%d online', '%d online', $online_count, 'presence-api' ), $online_count );
+	/* translators: %d: Number of users currently online. */
+	$aria_label = sprintf( _n( '%d user online', '%d users online', $online_count, 'presence-api' ), $online_count );
+
+	if ( empty( $others ) ) {
+		$label      = __( 'Just you', 'presence-api' );
+		$aria_label = __( 'Only you are online', 'presence-api' );
+	}
 
 	$wp_admin_bar->add_node(
 		array(
@@ -166,11 +168,7 @@ function wp_presence_admin_bar_node( $wp_admin_bar ) {
 			'meta'   => array(
 				'class'      => 'presence-bar-node menupop',
 				'tabindex'   => 0,
-				'aria-label' => sprintf(
-				/* translators: %d: Number of users currently online. */
-					_n( '%d user online', '%d users online', $online_count, 'presence-api' ),
-					$online_count
-				),
+				'aria-label' => $aria_label,
 			),
 		)
 	);
@@ -222,7 +220,10 @@ function wp_presence_admin_bar_node( $wp_admin_bar ) {
 		}
 	}
 
-	if ( ! empty( $elsewhere ) ) {
+	// Where others are is for people who can browse the site's users; the rest see only who shares their page.
+	$can_list_users = current_user_can( 'list_users' );
+
+	if ( $can_list_users && ! empty( $elsewhere ) ) {
 		$add_section( 'elsewhere', __( 'Elsewhere', 'presence-api' ) );
 
 		$shown = 0;
@@ -262,6 +263,10 @@ function wp_presence_admin_bar_node( $wp_admin_bar ) {
 			$row( 'elsewhere', $user, $screen_label, $screen_url ? $screen_url : false );
 			++$shown;
 		}
+	}
+
+	if ( ! $can_list_users ) {
+		return;
 	}
 
 	$wp_admin_bar->add_group(
