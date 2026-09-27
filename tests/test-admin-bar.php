@@ -8,6 +8,7 @@
  *
  * @covers ::wp_presence_admin_bar_node
  * @covers ::wp_presence_admin_bar_assets
+ * @covers ::wp_presence_avatar_border_color
  */
 class WP_Test_Presence_Admin_Bar extends WP_Presence_UnitTestCase {
 
