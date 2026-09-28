@@ -523,7 +523,7 @@ function wp_presence_scene_casting( array $scene ) {
 }
 
 /**
- * Narrates the cleanup after a scene, such as "The cast exits and is deleted with their posts".
+ * Narrates the cleanup after a scene, such as "The cast exits".
  *
  * @since 0.12.0
  *
@@ -533,8 +533,8 @@ function wp_presence_scene_casting( array $scene ) {
 function wp_presence_scene_exit( array $scene ) {
 	return 1 === count( $scene['cast'] )
 		/* translators: %s: Actor name. */
-		? sprintf( __( '%s exits and is deleted with their posts', 'presence-api' ), wp_presence_scene_actor_name( 0 ) )
-		: __( 'The cast exits and is deleted with their posts', 'presence-api' );
+		? sprintf( __( '%s exits', 'presence-api' ), wp_presence_scene_actor_name( 0 ) )
+		: __( 'The cast exits', 'presence-api' );
 }
 
 /**
