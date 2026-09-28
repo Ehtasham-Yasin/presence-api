@@ -64,18 +64,20 @@ function wp_presence_debugger_admin_bar_node( $wp_admin_bar ) {
 		);
 	}
 
-	foreach ( $rooms as $i => $room ) {
-		$group = 'presence-debug-room-' . $i;
+	if ( $rooms ) {
 		$wp_admin_bar->add_group(
 			array(
 				'parent' => 'presence-debug',
-				'id'     => $group,
-				'meta'   => array( 'class' => 'ab-sub-secondary' ),
+				'id'     => 'presence-debug-rooms',
 			)
 		);
+	}
+
+	foreach ( $rooms as $i => $room ) {
+		$group = 'presence-debug-room-' . $i;
 		$wp_admin_bar->add_node(
 			array(
-				'parent' => $group,
+				'parent' => 'presence-debug-rooms',
 				'id'     => $group . '-name',
 				'title'  => '<code>' . esc_html( $room ) . '</code>',
 				'meta'   => array( 'class' => 'presence-debug-room' ),
@@ -89,7 +91,7 @@ function wp_presence_debugger_admin_bar_node( $wp_admin_bar ) {
 			$age  = max( 0, time() - (int) strtotime( $row->date_gmt . ' UTC' ) );
 			$wp_admin_bar->add_node(
 				array(
-					'parent' => $group,
+					'parent' => 'presence-debug-rooms',
 					'id'     => $group . '-' . $j,
 					'title'  => '<span>' . esc_html( $user ? $user->display_name : '#' . $row->user_id ) . ' <code>' . esc_html( $row->client_id ) . '</code></span><span class="presence-debug-value" data-presence-debug-age="' . esc_attr( $age ) . '"></span>',
 					'meta'   => array( 'class' => 'presence-debug-row' ),
@@ -99,7 +101,7 @@ function wp_presence_debugger_admin_bar_node( $wp_admin_bar ) {
 		if ( count( $rows ) > 20 ) {
 			$wp_admin_bar->add_node(
 				array(
-					'parent' => $group,
+					'parent' => 'presence-debug-rooms',
 					'id'     => $group . '-more',
 					/* translators: %s: Number of clients not listed. */
 					'title'  => esc_html( sprintf( __( '+%s more', 'presence-api' ), number_format_i18n( count( $rows ) - 20 ) ) ),
@@ -114,7 +116,6 @@ function wp_presence_debugger_admin_bar_node( $wp_admin_bar ) {
 			array(
 				'parent' => 'presence-debug',
 				'id'     => 'presence-debug-tools',
-				'meta'   => array( 'class' => 'ab-sub-secondary' ),
 			)
 		);
 		$wp_admin_bar->add_node(
@@ -214,7 +215,9 @@ function wp_presence_debugger_admin_bar_assets() {
 		#wpadminbar #wp-admin-bar-presence-debug > .ab-sub-wrapper { min-width: 320px; max-height: calc(100vh - 64px); overflow-y: auto; }
 		#wpadminbar #wp-admin-bar-presence-debug.is-pinned > .ab-sub-wrapper { display: block; }
 		#wpadminbar #wp-admin-bar-presence-debug.is-pinned { position: relative; z-index: 1; }
-		#wpadminbar #wp-admin-bar-presence-debug .ab-submenu .ab-item { display: flex; align-items: center; min-height: 26px; }
+		#wpadminbar #wp-admin-bar-presence-debug .ab-submenu .ab-item { display: flex; align-items: center; min-height: 22px; }
+		#wpadminbar #wp-admin-bar-presence-debug .ab-submenu + .ab-submenu { border-top: 1px solid rgba(128, 128, 128, .3); }
+		#wpadminbar #wp-admin-bar-presence-debug .presence-debug-room:not(:first-child) { margin-top: 6px; }
 		#wpadminbar #wp-admin-bar-presence-debug .ab-submenu .ab-item, #wpadminbar #wp-admin-bar-presence-debug .ab-submenu .ab-item > * { line-height: 1.4; }
 		#wp-admin-bar-presence-debug .presence-debug-row > .ab-item { gap: 16px; cursor: default; }
 		#wp-admin-bar-presence-debug .presence-debug-value { margin-inline-start: auto; font-variant-numeric: tabular-nums; }
