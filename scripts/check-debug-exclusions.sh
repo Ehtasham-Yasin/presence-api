@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# includes/db-viewer.php and includes/debugger-widget.php are WP_DEBUG-only
+# includes/db-viewer.php and the includes/debugger-*.php files are WP_DEBUG-only
 # developer tools, excluded from measurement/distribution in three places:
 #
 #   - .distignore        keeps them out of the distributed zip

@@ -110,6 +110,13 @@ if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 		add_action( 'wp_dashboard_setup', 'wp_presence_heartbeat_widget_register' );
 		add_filter( 'heartbeat_received', 'wp_presence_heartbeat_widget_received', 10, 3 );
 	}
+	if ( file_exists( WP_PRESENCE_PLUGIN_DIR . 'includes/debugger-admin-bar.php' ) ) {
+		require_once WP_PRESENCE_PLUGIN_DIR . 'includes/debugger-admin-bar.php';
+		add_action( 'admin_bar_menu', 'wp_presence_debugger_admin_bar_node', 79 );
+		add_action( 'admin_enqueue_scripts', 'wp_presence_debugger_admin_bar_assets' );
+		add_action( 'wp_enqueue_scripts', 'wp_presence_debugger_admin_bar_assets' );
+		add_filter( 'heartbeat_received', 'wp_presence_debugger_heartbeat_received', 13, 2 );
+	}
 	if ( file_exists( WP_PRESENCE_PLUGIN_DIR . 'includes/db-viewer.php' ) ) {
 		require_once WP_PRESENCE_PLUGIN_DIR . 'includes/db-viewer.php';
 	}
