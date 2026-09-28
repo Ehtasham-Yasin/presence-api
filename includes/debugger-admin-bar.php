@@ -259,7 +259,6 @@ function wp_presence_debugger_admin_bar_assets() {
 				// Only a suspended Heartbeat stops sending; a lost connection keeps retrying on schedule.
 				const state = left < -10 ? "suspended" : ( wp.heartbeat.hasConnectionError() ? "lost" : "" );
 				node.classList.toggle( "is-lost", "lost" === state );
-				node.classList.toggle( "is-suspended", "suspended" === state );
 				node.querySelector( ".presence-debug-countdown" ).textContent = state ? i18n[ state ] : seconds.format( Math.max( 0, left ) );
 				node.querySelectorAll( "[data-presence-debug]" ).forEach( function ( el ) {
 					const key = el.dataset.presenceDebug;
