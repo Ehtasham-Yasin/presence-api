@@ -318,69 +318,6 @@ msgstr ""
 msgid "No entries."
 msgstr ""
 
-#: includes/debugger-widget.php:24
-msgid "Presence API Debugger"
-msgstr ""
-
-#: includes/debugger-widget.php:66
-#: includes/debugger-widget.php:81
-#: includes/debugger-widget.php:202
-msgid "user"
-msgid_plural "users"
-msgstr[0] ""
-msgstr[1] ""
-
-#: includes/debugger-widget.php:69
-msgid "last beat"
-msgstr ""
-
-#: includes/debugger-widget.php:72
-msgid "TTL"
-msgstr ""
-
-#: includes/debugger-widget.php:81
-#: includes/debugger-widget.php:200
-msgid "entry"
-msgid_plural "entries"
-msgstr[0] ""
-msgstr[1] ""
-
-#: includes/debugger-widget.php:87
-msgid "wp_presence table"
-msgstr ""
-
-#: includes/debugger-widget.php:195
-msgid "Listening"
-msgstr ""
-
-#: includes/debugger-widget.php:196
-msgid "Resting"
-msgstr ""
-
-#: includes/debugger-widget.php:197
-msgid "Sleeping"
-msgstr ""
-
-#: includes/debugger-widget.php:198
-msgid "active user"
-msgstr ""
-
-#: includes/debugger-widget.php:199
-msgid "active users"
-msgstr ""
-
-#: includes/debugger-widget.php:201
-msgid "entries"
-msgstr ""
-
-#: includes/debugger-widget.php:203
-msgid "users"
-msgstr ""
-
-#: includes/debugger-widget.php:204
-msgid "No active rooms."
-msgstr ""
-
 #: includes/heartbeat.php:106
 msgid "Home"
 msgstr ""
