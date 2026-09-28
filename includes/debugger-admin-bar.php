@@ -214,11 +214,13 @@ function wp_presence_debugger_admin_bar_assets() {
 		@keyframes presence-debug-heart { 0% { transform: scale(1); } 5% { transform: scale(1.45); } 14% { transform: scale(0.92); } 22% { transform: scale(1.3); } 32% { transform: scale(0.97); } 42%, 100% { transform: scale(1); } }
 		#wpadminbar #wp-admin-bar-presence-debug > .ab-sub-wrapper { min-width: 320px; max-height: calc(100vh - 64px); overflow-y: auto; }
 		#wpadminbar #wp-admin-bar-presence-debug.is-pinned > .ab-sub-wrapper { display: block; }
-		#wp-admin-bar-presence-debug .presence-debug-row > .ab-item { display: flex !important; gap: 16px; cursor: default; }
+		#wpadminbar #wp-admin-bar-presence-debug .ab-submenu .ab-item { display: flex; align-items: center; min-height: 26px; }
+		#wpadminbar #wp-admin-bar-presence-debug .ab-submenu .ab-item, #wpadminbar #wp-admin-bar-presence-debug .ab-submenu .ab-item > * { line-height: 1.4; }
+		#wp-admin-bar-presence-debug .presence-debug-row > .ab-item { gap: 16px; cursor: default; }
 		#wp-admin-bar-presence-debug .presence-debug-value { margin-inline-start: auto; font-variant-numeric: tabular-nums; opacity: .8; }
 		.admin-color-light #wp-admin-bar-presence-debug .presence-debug-value { opacity: 1; color: #646970; }
 		#wp-admin-bar-presence-debug .presence-debug-table .dashicons { font: 16px/1 dashicons; margin-inline-start: 4px; vertical-align: text-bottom; }
-		#wp-admin-bar-presence-debug code { padding: 0; background: none; color: inherit; font-size: 12px; }
+		#wp-admin-bar-presence-debug code { padding: 0; background: none; color: inherit; font-size: 12px; line-height: inherit; }
 		#wp-admin-bar-presence-debug .presence-debug-room > .ab-item { font-weight: 600; cursor: default; }
 		#wp-admin-bar-presence-debug .presence-debug-more > .ab-item { opacity: .8; cursor: default; }
 		.admin-color-light #wp-admin-bar-presence-debug .presence-debug-more > .ab-item { opacity: 1; color: #646970; }
