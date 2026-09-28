@@ -82,7 +82,7 @@ function wp_presence_debugger_admin_bar_node( $wp_admin_bar ) {
 				'title'  => '<code>' . esc_html( $room ) . '</code>',
 				'meta'   => array(
 					'class' => 'presence-debug-room',
-					'html'  => file_exists( __DIR__ . '/db-viewer.php' ) ? '<a class="presence-debug-table" href="' . esc_url( wp_nonce_url( add_query_arg( 'room', rawurlencode( $room ), home_url( '/?presence-db=1' ) ), 'wp_presence_db_viewer' ) ) . '" target="_blank" title="' . esc_attr__( 'View in the presence table', 'presence-api' ) . '"><span class="screen-reader-text">' . esc_html__( 'View in the presence table', 'presence-api' ) . ' ' . esc_html__( '(opens in a new window)', 'presence-api' ) . '</span></a>' : '',
+					'html'  => file_exists( __DIR__ . '/db-viewer.php' ) ? '<a class="presence-debug-table" role="menuitem" href="' . esc_url( wp_nonce_url( add_query_arg( 'room', rawurlencode( $room ), home_url( '/?presence-db=1' ) ), 'wp_presence_db_viewer' ) ) . '" target="_blank" title="' . esc_attr__( 'View in the presence table', 'presence-api' ) . '"><span class="screen-reader-text">' . esc_html__( 'View in the presence table', 'presence-api' ) . ' ' . esc_html__( '(opens in a new window)', 'presence-api' ) . '</span></a>' : '',
 				),
 			)
 		);
@@ -310,7 +310,12 @@ function wp_presence_debugger_admin_bar_assets() {
 					node.style.transform = "translateX(" + ( theirs.left - mine.right ) + "px)";
 				}
 			}
+			// Core marks the first link in a menu as expanded, which here is a table link, not this node.
+			function expand() {
+				node.firstElementChild.setAttribute( "aria-expanded", node.matches( ".hover, .is-pinned" ) ? "true" : "false" );
+			}
 			new MutationObserver( function () {
+				expand();
 				window.requestAnimationFrame( reposition );
 			} ).observe( document.getElementById( "wpadminbar" ), { attributes: true, attributeFilter: [ "class" ], subtree: true } );
 
@@ -326,7 +331,6 @@ function wp_presence_debugger_admin_bar_assets() {
 
 			function pin( pinned ) {
 				node.classList.toggle( "is-pinned", pinned );
-				node.firstElementChild.setAttribute( "aria-expanded", pinned ? "true" : "false" );
 				try {
 					window.localStorage.setItem( "presence-debug-pinned", pinned ? "1" : "" );
 				} catch ( e ) {}
