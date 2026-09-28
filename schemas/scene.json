@@ -29,10 +29,10 @@
 			"maxLength": 60
 		},
 		"cast": {
-			"description": "One to five actors, named Actor 1 onwards in this order.",
+			"description": "One to seven actors, named Actor 1 onwards in this order.",
 			"type": "array",
 			"minItems": 1,
-			"maxItems": 5,
+			"maxItems": 7,
 			"items": {
 				"type": "object",
 				"additionalProperties": false,
@@ -78,7 +78,7 @@
 		"actor": {
 			"type": "integer",
 			"minimum": 1,
-			"maximum": 5
+			"maximum": 7
 		},
 		"post": {
 			"description": "The Nth post a write cue created.",

@@ -197,8 +197,8 @@ function wp_presence_scene_prepare( $scene ) {
 	}
 
 	$cast = $scene['cast'] ?? null;
-	if ( ! is_array( $cast ) || ! wp_is_numeric_array( $cast ) || count( $cast ) < 1 || count( $cast ) > 5 ) {
-		return $invalid( __( 'The cast must list one to five actors.', 'presence-api' ) );
+	if ( ! is_array( $cast ) || ! wp_is_numeric_array( $cast ) || count( $cast ) < 1 || count( $cast ) > 7 ) {
+		return $invalid( __( 'The cast must list one to seven actors.', 'presence-api' ) );
 	}
 	foreach ( $cast as $part ) {
 		if ( ! is_array( $part ) || array_keys( $part ) !== array( 'role' ) || ! in_array( $part['role'], $roles, true ) ) {
@@ -691,7 +691,7 @@ function wp_presence_scene_sweep( $all = false ) {
 	$query['fields'] = array( 'ID', 'user_login' );
 	$user_ids        = array();
 	foreach ( get_users( $query ) as $user ) {
-		if ( preg_match( '/^actor[1-5]run\d+$/', $user->user_login ) ) {
+		if ( preg_match( '/^actor[1-7]run\d+$/', $user->user_login ) ) {
 			$user_ids[] = (int) $user->ID;
 		}
 	}
