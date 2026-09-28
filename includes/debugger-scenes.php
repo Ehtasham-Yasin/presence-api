@@ -1014,7 +1014,8 @@ function wp_presence_scene_assets() {
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene > .ab-item { flex: 1; min-width: 0; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene .presence-debug-value { padding-inline-start: 16px; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene > .ab-item:not(:last-child) { padding-inline-end: 4px; }
-		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-button { display: flex; flex: none; align-items: center; justify-content: center; width: 24px; color: inherit; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-button { display: flex; flex: none; align-items: center; justify-content: center; width: 28px; padding: 0; color: inherit; opacity: 0; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene:is(:hover, :focus-within) .presence-debug-scene-button, #wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-button:is(.is-resume, [aria-pressed="true"]) { opacity: 1; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-button:last-child { margin-inline-end: 6px; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-button:is(:hover, :focus, [aria-pressed="true"]) { color: var(--wp-admin-theme-color, #72aee6); }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-button::before { font: 16px/1 dashicons; }
