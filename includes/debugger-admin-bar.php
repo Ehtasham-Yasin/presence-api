@@ -226,7 +226,8 @@ function wp_presence_debugger_admin_bar_assets() {
 		#wpadminbar #wp-admin-bar-presence-debug .presence-debug-color { display: inline-block; width: 8px; height: 8px; margin-inline-end: 8px; border-radius: 50%; }
 		#wpadminbar #wp-admin-bar-presence-debug .presence-debug-room { display: flex; }
 		#wpadminbar #wp-admin-bar-presence-debug .presence-debug-room > .ab-item { flex: 1; }
-		#wpadminbar #wp-admin-bar-presence-debug .presence-debug-table { display: flex; align-items: center; padding-inline: 8px 10px; color: inherit; }
+		#wpadminbar #wp-admin-bar-presence-debug .presence-debug-room:has(.presence-debug-table) > .ab-item { padding-inline-start: 0; }
+		#wpadminbar #wp-admin-bar-presence-debug .presence-debug-table { display: flex; order: -1; align-items: center; padding-inline: 10px 8px; color: inherit; }
 		#wpadminbar #wp-admin-bar-presence-debug .presence-debug-table::before { content: "\\f17e"; font: 16px/1 dashicons; }
 		#wpadminbar #wp-admin-bar-presence-debug .presence-debug-table:is(:hover, :focus) { color: var(--wp-admin-theme-color, #72aee6); }
 		#wp-admin-bar-presence-debug code { padding: 0; background: none; color: inherit; font-size: 12px; font-weight: inherit; line-height: inherit; }
