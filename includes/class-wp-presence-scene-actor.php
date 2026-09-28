@@ -76,6 +76,37 @@ final class WP_Presence_Scene_Actor {
 	}
 
 	/**
+	 * Crosses to another admin screen, leaving any editor they had open.
+	 *
+	 * @param string $place A place from wp_presence_scene_places().
+	 *
+	 * @throws RuntimeException When their role cannot open that screen.
+	 */
+	public function visit( $place ) {
+		list( $screen, $title, $cap ) = wp_presence_scene_places()[ $place ];
+
+		if ( ! user_can( $this->ID, $cap ) ) {
+			/* translators: %s: Screen title. */
+			throw new RuntimeException( sprintf( __( 'Their role cannot open %s.', 'presence-api' ), $title ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Printed as text.
+		}
+
+		foreach ( $this->run['posts'] as $post_id ) {
+			$post = get_post( $post_id );
+			if ( $post && isset( $this->run['beats'][ $this->ID ][ wp_presence_post_room( $post ) . ' editor-' . $this->ID ] ) ) {
+				$this->close( $post_id );
+			}
+		}
+
+		$state = array(
+			'screen' => $screen,
+			'title'  => $title,
+			'color'  => wp_presence_assign_user_color( $this->ID ),
+		);
+
+		$this->beat( wp_presence_admin_room(), 'user-' . $this->ID, $state );
+	}
+
+	/**
 	 * Writes a draft of their own.
 	 *
 	 * @param string $title Post title.
@@ -156,6 +187,12 @@ final class WP_Presence_Scene_Actor {
 	 */
 	public function type( $post_id, $text ) {
 		$post   = $this->scene_post( $post_id );
+		$holder = $this->sees_lock( $post->ID );
+		if ( $holder ) {
+			$user = get_userdata( $holder );
+			/* translators: %s: Who holds the lock. */
+			throw new RuntimeException( sprintf( __( '%s holds the lock.', 'presence-api' ), $user ? $user->display_name : '#' . $holder ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Printed as text.
+		}
 		$result = $this->act(
 			function () use ( $post, $text ) {
 				return wp_update_post(
@@ -206,24 +243,6 @@ final class WP_Presence_Scene_Actor {
 	public function leave() {
 		unset( $this->run['beats'][ $this->ID ] );
 		wp_remove_user_presence( $this->ID );
-	}
-
-	/**
-	 * The latest scene post they wrote.
-	 *
-	 * @return int The post ID.
-	 *
-	 * @throws RuntimeException When they have not written one.
-	 */
-	public function post() {
-		foreach ( array_reverse( $this->run['posts'] ) as $post_id ) {
-			if ( (int) get_post_field( 'post_author', $post_id ) === $this->ID ) {
-				return (int) $post_id;
-			}
-		}
-
-		/* translators: %s: Actor name. */
-		throw new RuntimeException( sprintf( __( '%s has not written a post yet.', 'presence-api' ), $this->name ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Printed as text.
 	}
 
 	/**
@@ -344,6 +363,11 @@ final class WP_Presence_Scene_Actor {
 		if ( ! $post || ! in_array( (int) $post_id, $this->run['posts'], true ) ) {
 			/* translators: %d: Post ID. */
 			throw new RuntimeException( sprintf( __( 'Post %d is not part of the scene.', 'presence-api' ), $post_id ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Printed as text.
+		}
+
+		if ( ! user_can( $this->ID, 'edit_post', $post->ID ) ) {
+			/* translators: %s: Post title. */
+			throw new RuntimeException( sprintf( __( 'Their role cannot edit "%s".', 'presence-api' ), $post->post_title ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Printed as text.
 		}
 
 		return $post;

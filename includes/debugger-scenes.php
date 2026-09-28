@@ -10,22 +10,35 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Registers a scene for the debugger to direct.
+ * Places an actor can visit, each with its screen ID, title and the capability it needs.
  *
  * @since 0.12.0
  *
- * @param string $name Namespaced scene name, such as `my-plugin/review-queue`.
- * @param array  $args {
- *     Scene arguments.
+ * @return array[] Places keyed by the name a scene uses.
+ */
+function wp_presence_scene_places() {
+	return array(
+		'dashboard' => array( 'dashboard', __( 'Dashboard', 'presence-api' ), 'read' ),
+		'posts'     => array( 'edit-post', __( 'Posts', 'presence-api' ), 'edit_posts' ),
+		'pages'     => array( 'edit-page', __( 'Pages', 'presence-api' ), 'edit_pages' ),
+		'media'     => array( 'upload', __( 'Media', 'presence-api' ), 'upload_files' ),
+		'comments'  => array( 'edit-comments', __( 'Comments', 'presence-api' ), 'edit_posts' ),
+		'profile'   => array( 'profile', __( 'Profile', 'presence-api' ), 'read' ),
+	);
+}
+
+/**
+ * Registers a scene for the debugger to direct.
  *
- *     @type string $label    Button label.
- *     @type array  $cast     One to five parts, each `array( 'role' => 'author' )`, cast in order as Actor 1 to Actor 5.
- *     @type array  $cues     Each `array( 'after' => seconds, 'label' => string, 'callback' => callable )`. The callback receives the cast as WP_Presence_Scene_Actor objects.
- *     @type int    $duration Optional. Seconds before the strike. Default five after the last cue.
- * }
+ * A scene is data only: every cue is an action from a fixed list, acted
+ * through WP_Presence_Scene_Actor on posts the scene writes itself.
+ *
+ * @since 0.12.0
+ *
+ * @param string|array $scene Path to a scene.json file, or the same shape as an array. See schemas/scene.json.
  * @return bool Whether the scene was registered.
  */
-function wp_register_presence_scene( $name, $args ) {
+function wp_register_presence_scene( $scene ) {
 	global $wp_presence_scenes;
 
 	if ( ! doing_action( 'wp_presence_scenes_init' ) ) {
@@ -34,40 +47,283 @@ function wp_register_presence_scene( $name, $args ) {
 		return false;
 	}
 
-	if ( ! is_string( $name ) || ! preg_match( '#^[a-z0-9-]+/[a-z0-9-]+$#', $name ) ) {
-		_doing_it_wrong( __FUNCTION__, esc_html__( 'Scene names must be a namespace and a name, lowercase with dashes, such as my-plugin/review-queue.', 'presence-api' ), '0.12.0' );
+	$source = is_string( $scene ) ? wp_basename( $scene ) : '';
+	if ( is_string( $scene ) ) {
+		$scene = '.json' === substr( $scene, -5 ) && is_file( $scene ) && filesize( $scene ) <= 65536
+			? wp_json_file_decode( $scene, array( 'associative' => true ) )
+			: null;
+	}
+
+	$prepared = wp_presence_scene_prepare( $scene );
+
+	if ( is_wp_error( $prepared ) ) {
+		_doing_it_wrong( __FUNCTION__, esc_html( ( $source ? $source . ': ' : '' ) . $prepared->get_error_message() ), '0.12.0' );
 		return false;
 	}
 
-	$args = wp_parse_args(
-		$args,
-		array(
-			'label'    => $name,
-			'cast'     => array(),
-			'cues'     => array(),
-			'duration' => 0,
-		)
-	);
-
-	if ( ! $args['cast'] || count( $args['cast'] ) > 5 ) {
-		_doing_it_wrong( __FUNCTION__, esc_html__( 'A scene casts one to five actors.', 'presence-api' ), '0.12.0' );
-		return false;
-	}
-
-	$last = 0;
-	foreach ( $args['cues'] as $cue ) {
-		if ( ! isset( $cue['after'], $cue['label'], $cue['callback'] ) || ! is_callable( $cue['callback'] ) ) {
-			_doing_it_wrong( __FUNCTION__, esc_html__( 'Each cue needs an after, a label and a callback.', 'presence-api' ), '0.12.0' );
-			return false;
-		}
-		$last = max( $last, (int) $cue['after'] );
-	}
-
-	$args['duration'] = max( (int) $args['duration'], $last + 5 );
-
-	$wp_presence_scenes[ $name ] = $args;
+	$wp_presence_scenes[ $prepared['name'] ] = $prepared;
 
 	return true;
+}
+
+/**
+ * Checks a scene against the allowed actions and narrates each cue.
+ *
+ * @since 0.12.0
+ *
+ * @access private
+ *
+ * @param mixed $scene The decoded scene.
+ * @return array|WP_Error The scene ready to direct, or why it cannot be.
+ */
+function wp_presence_scene_prepare( $scene ) {
+	$fields = array(
+		'visit'    => array( 'place' ),
+		'write'    => array( 'title' ),
+		'open'     => array( 'post' ),
+		'takeOver' => array( 'post' ),
+		'type'     => array( 'post', 'text' ),
+		'close'    => array( 'post' ),
+		'drop'     => array(),
+		'leave'    => array(),
+		'check'    => array( 'expect', 'post' ),
+	);
+	$roles  = array( 'subscriber', 'contributor', 'author', 'editor' );
+	$places = wp_presence_scene_places();
+
+	if ( ! is_array( $scene ) || array_diff( array_keys( $scene ), array( '$schema', 'name', 'title', 'cast', 'cues' ) ) ) {
+		return new WP_Error( 'presence_scene_invalid', __( 'A scene has only $schema, name, title, cast and cues.', 'presence-api' ) );
+	}
+
+	if ( ! is_string( $scene['name'] ?? null ) || ! preg_match( '#^[a-z0-9-]+/[a-z0-9-]+$#', $scene['name'] ) ) {
+		return new WP_Error( 'presence_scene_invalid', __( 'The name must be a namespace and a name, lowercase with dashes, such as my-plugin/review-queue.', 'presence-api' ) );
+	}
+
+	$title = is_string( $scene['title'] ?? null ) ? sanitize_text_field( $scene['title'] ) : '';
+	if ( '' === $title || mb_strlen( $title ) > 60 ) {
+		return new WP_Error( 'presence_scene_invalid', __( 'The title must be text of up to 60 characters.', 'presence-api' ) );
+	}
+
+	$cast = $scene['cast'] ?? null;
+	if ( ! is_array( $cast ) || ! wp_is_numeric_array( $cast ) || count( $cast ) < 1 || count( $cast ) > 5 ) {
+		return new WP_Error( 'presence_scene_invalid', __( 'The cast must list one to five actors.', 'presence-api' ) );
+	}
+	foreach ( $cast as $part ) {
+		if ( ! is_array( $part ) || array_keys( $part ) !== array( 'role' ) || ! in_array( $part['role'], $roles, true ) ) {
+			/* translators: %s: Allowed roles. */
+			return new WP_Error( 'presence_scene_invalid', sprintf( __( 'Each actor needs only a role, one of %s.', 'presence-api' ), implode( ', ', $roles ) ) );
+		}
+	}
+
+	$cues = $scene['cues'] ?? null;
+	if ( ! is_array( $cues ) || ! wp_is_numeric_array( $cues ) || count( $cues ) < 1 || count( $cues ) > 30 ) {
+		return new WP_Error( 'presence_scene_invalid', __( 'The cues must list one to thirty actions.', 'presence-api' ) );
+	}
+
+	$prepared = array();
+	$titles   = array();
+	$present  = array_fill( 0, count( $cast ), false );
+	$last     = 0;
+
+	foreach ( $cues as $n => $cue ) {
+		/* translators: %d: Cue number. */
+		$where  = sprintf( __( 'Cue %d', 'presence-api' ), $n + 1 ) . ': ';
+		$action = is_array( $cue ) && is_string( $cue['action'] ?? null ) ? $cue['action'] : '';
+
+		if ( ! isset( $fields[ $action ] ) ) {
+			/* translators: %s: Allowed actions. */
+			return new WP_Error( 'presence_scene_invalid', $where . sprintf( __( 'The action must be one of %s.', 'presence-api' ), implode( ', ', array_keys( $fields ) ) ) );
+		}
+		if ( array_diff( array_keys( $cue ), array_merge( array( 'at', 'actor', 'action' ), $fields[ $action ] ) ) ) {
+			/* translators: 1: Action, 2: Allowed fields. */
+			return new WP_Error( 'presence_scene_invalid', $where . sprintf( __( '%1$s takes only %2$s.', 'presence-api' ), $action, implode( ', ', array_merge( array( 'at', 'actor', 'action' ), $fields[ $action ] ) ) ) );
+		}
+
+		$at = $cue['at'] ?? null;
+		if ( is_string( $at ) && preg_match( '/^(?:(\d{1,3})\+)?ttl(?:\+(\d{1,3}))?$/', $at, $m ) ) {
+			$at = (int) ( $m[1] ?? 0 ) + wp_presence_get_timeout() + (int) ( $m[2] ?? 0 );
+		}
+		if ( ! is_int( $at ) || $at < $last || $at > 900 ) {
+			return new WP_Error( 'presence_scene_invalid', $where . __( 'at must be seconds from 0 to 900, or a TTL offset such as "25+ttl+5", and never earlier than the cue before.', 'presence-api' ) );
+		}
+		$last = $at;
+
+		$actor = $cue['actor'] ?? null;
+		$whole = 'cast' === $actor;
+		$group = in_array( $action, array( 'visit', 'drop', 'leave' ), true ) || ( 'check' === $action && in_array( $cue['expect'] ?? '', array( 'online', 'offline' ), true ) );
+		if ( ! ( $whole && $group ) && ! ( is_int( $actor ) && $actor >= 1 && $actor <= count( $cast ) ) ) {
+			/* translators: %d: Number of actors. */
+			return new WP_Error( 'presence_scene_invalid', $where . sprintf( __( 'actor must be a number from 1 to %d, or "cast" for visit, drop, leave and online checks.', 'presence-api' ), count( $cast ) ) );
+		}
+		$who     = $whole ? __( 'The cast', 'presence-api' ) : wp_presence_scene_actor_name( $actor - 1 );
+		$members = $whole ? array_keys( $present ) : array( $actor - 1 );
+
+		$clean = array(
+			'after'  => $at,
+			'actor'  => $actor,
+			'action' => $action,
+		);
+
+		if ( in_array( 'post', $fields[ $action ], true ) && ( 'check' !== $action || in_array( $cue['expect'] ?? '', array( 'locked', 'unlocked' ), true ) ) ) {
+			if ( ! is_int( $cue['post'] ?? null ) || $cue['post'] < 1 || $cue['post'] > count( $titles ) ) {
+				return new WP_Error( 'presence_scene_invalid', $where . __( 'post must number a post an earlier write cue created, starting at 1.', 'presence-api' ) );
+			}
+			$clean['post'] = $cue['post'];
+		}
+
+		foreach ( array( 'title', 'text' ) as $key ) {
+			if ( ! in_array( $key, $fields[ $action ], true ) || ( 'text' === $key && ! isset( $cue['text'] ) ) ) {
+				continue;
+			}
+			$value = is_string( $cue[ $key ] ?? null ) ? sanitize_text_field( $cue[ $key ] ) : '';
+			if ( '' === $value || mb_strlen( $value ) > 100 ) {
+				/* translators: %s: Field name. */
+				return new WP_Error( 'presence_scene_invalid', $where . sprintf( __( '%s must be text of up to 100 characters.', 'presence-api' ), $key ) );
+			}
+			$clean[ $key ] = $value;
+		}
+
+		$post = isset( $clean['post'] ) ? $titles[ $clean['post'] - 1 ] : '';
+
+		switch ( $action ) {
+			case 'visit':
+				if ( ! isset( $places[ $cue['place'] ?? '' ] ) ) {
+					/* translators: %s: Allowed places. */
+					return new WP_Error( 'presence_scene_invalid', $where . sprintf( __( 'place must be one of %s.', 'presence-api' ), implode( ', ', array_keys( $places ) ) ) );
+				}
+				$clean['place'] = $cue['place'];
+				$entering       = ! $present[ $members[0] ];
+				$label          = $entering
+					/* translators: 1: Actor, 2: Screen title. */
+					? sprintf( __( '%1$s enters on %2$s', 'presence-api' ), $who, $places[ $cue['place'] ][1] )
+					/* translators: 1: Actor, 2: Screen title. */
+					: sprintf( __( '%1$s crosses to %2$s', 'presence-api' ), $who, $places[ $cue['place'] ][1] );
+				break;
+			case 'write':
+				$titles[] = $clean['title'];
+				/* translators: 1: Actor, 2: Post title. */
+				$label = sprintf( __( '%1$s writes "%2$s"', 'presence-api' ), $who, $clean['title'] );
+				break;
+			case 'open':
+				/* translators: 1: Actor, 2: Post title. */
+				$label = sprintf( __( '%1$s opens "%2$s"', 'presence-api' ), $who, $post );
+				break;
+			case 'takeOver':
+				/* translators: 1: Actor, 2: Post title. */
+				$label = sprintf( __( '%1$s takes over "%2$s"', 'presence-api' ), $who, $post );
+				break;
+			case 'type':
+				/* translators: 1: Actor, 2: Post title. */
+				$label = sprintf( __( '%1$s edits "%2$s"', 'presence-api' ), $who, $post );
+				break;
+			case 'close':
+				/* translators: 1: Actor, 2: Post title. */
+				$label = sprintf( __( '%1$s closes "%2$s"', 'presence-api' ), $who, $post );
+				break;
+			case 'drop':
+				/* translators: %s: Actor. */
+				$label = sprintf( __( '%s loses connection', 'presence-api' ), $who );
+				break;
+			case 'leave':
+				/* translators: %s: Actor. */
+				$label = sprintf( __( '%s logs out', 'presence-api' ), $who );
+				break;
+			default:
+				$expects = array(
+					/* translators: %s: Actor. */
+					'online'   => sprintf( __( '%s is online', 'presence-api' ), $who ),
+					/* translators: %s: Actor. */
+					'offline'  => sprintf( __( '%s is offline', 'presence-api' ), $who ),
+					/* translators: 1: Actor, 2: Post title. */
+					'locked'   => sprintf( __( '%1$s finds "%2$s" locked', 'presence-api' ), $who, $post ),
+					/* translators: 1: Actor, 2: Post title. */
+					'unlocked' => sprintf( __( '%1$s finds "%2$s" free', 'presence-api' ), $who, $post ),
+				);
+				if ( ! isset( $expects[ $cue['expect'] ?? '' ] ) ) {
+					return new WP_Error( 'presence_scene_invalid', $where . __( 'expect must be online, offline, locked or unlocked.', 'presence-api' ) );
+				}
+				$clean['expect'] = $cue['expect'];
+				$label           = $expects[ $cue['expect'] ];
+		}
+
+		foreach ( $members as $i ) {
+			if ( in_array( $action, array( 'drop', 'leave' ), true ) ) {
+				$present[ $i ] = false;
+			} elseif ( 'check' !== $action ) {
+				$present[ $i ] = true;
+			}
+		}
+
+		$clean['label'] = $label;
+		$prepared[]     = $clean;
+	}
+
+	return array(
+		'name'     => $scene['name'],
+		'label'    => $title,
+		'cast'     => $cast,
+		'cues'     => $prepared,
+		'duration' => $last + 5,
+	);
+}
+
+/**
+ * Plays one cue through the actors it names.
+ *
+ * @since 0.12.0
+ *
+ * @access private
+ *
+ * @param array                     $cue  A prepared cue.
+ * @param WP_Presence_Scene_Actor[] $cast The cast.
+ * @param array                     $run  The running scene.
+ *
+ * @throws UnexpectedValueException When a check does not hold.
+ */
+function wp_presence_scene_perform( array $cue, array $cast, array &$run ) {
+	$post = isset( $cue['post'] ) ? (int) ( $run['posts'][ $cue['post'] - 1 ] ?? 0 ) : 0;
+
+	foreach ( 'cast' === $cue['actor'] ? $cast : array( $cast[ $cue['actor'] - 1 ] ) as $actor ) {
+		switch ( $cue['action'] ) {
+			case 'visit':
+				$actor->visit( $cue['place'] );
+				break;
+			case 'write':
+				$actor->open( $actor->write( $cue['title'] ) );
+				break;
+			case 'open':
+				$actor->open( $post );
+				break;
+			case 'takeOver':
+				$actor->take_over( $post );
+				break;
+			case 'type':
+				$actor->type( $post, $cue['text'] ?? __( 'Another paragraph.', 'presence-api' ) );
+				break;
+			case 'close':
+				$actor->close( $post );
+				break;
+			case 'drop':
+				$actor->drop();
+				break;
+			case 'leave':
+				$actor->leave();
+				break;
+			default:
+				$holder = in_array( $cue['expect'], array( 'locked', 'unlocked' ), true ) ? $actor->sees_lock( $post ) : false;
+				$user   = $holder ? get_userdata( $holder ) : false;
+				$failed = array(
+					'online'   => $actor->is_present() ? '' : __( 'Not in the online list.', 'presence-api' ),
+					'offline'  => $actor->is_present() ? __( 'Still in the online list.', 'presence-api' ) : '',
+					'locked'   => $holder ? '' : __( 'Nobody else holds it.', 'presence-api' ),
+					/* translators: %s: Who holds the lock. */
+					'unlocked' => $holder ? sprintf( __( '%s holds it.', 'presence-api' ), $user ? $user->display_name : '#' . $holder ) : '',
+				);
+				if ( '' !== $failed[ $cue['expect'] ] ) {
+					throw new UnexpectedValueException( $failed[ $cue['expect'] ] ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Printed as text.
+				}
+		}
+	}
 }
 
 /**
@@ -92,22 +348,6 @@ function wp_get_presence_scenes() {
 	}
 
 	return (array) $wp_presence_scenes;
-}
-
-/**
- * Fails the current cue unless a condition holds.
- *
- * @since 0.12.0
- *
- * @param bool   $condition What the scene expects to be true.
- * @param string $message   What went wrong when it is not.
- *
- * @throws UnexpectedValueException When the condition is false.
- */
-function wp_presence_scene_expect( $condition, $message ) {
-	if ( ! $condition ) {
-		throw new UnexpectedValueException( $message ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Printed as text.
-	}
 }
 
 /**
@@ -258,7 +498,7 @@ function wp_presence_scene_direct() {
 		);
 
 		try {
-			call_user_func( $cue['callback'], $cast );
+			wp_presence_scene_perform( $cue, $cast, $run );
 			wp_presence_scene_note( $run, 'pass', $cue['label'] );
 		} catch ( Throwable $e ) {
 			$run['done'][ $i ] = 'fail';
@@ -395,7 +635,6 @@ function wp_presence_scene_sweep( $all = false ) {
 
 	$query = array(
 		'blog_id'  => 0,
-		'fields'   => 'ID',
 		'meta_key' => '_wp_presence_scene', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
 	);
 	if ( ! $all ) {
@@ -404,7 +643,13 @@ function wp_presence_scene_sweep( $all = false ) {
 		$query['meta_type']    = 'NUMERIC';
 	}
 
-	$user_ids = get_users( $query );
+	$query['fields'] = array( 'ID', 'user_login' );
+	$user_ids        = array();
+	foreach ( get_users( $query ) as $user ) {
+		if ( preg_match( '/^actor[1-5]run\d+$/', $user->user_login ) ) {
+			$user_ids[] = (int) $user->ID;
+		}
+	}
 	if ( ! $user_ids ) {
 		return;
 	}
@@ -423,12 +668,39 @@ function wp_presence_scene_sweep( $all = false ) {
 }
 
 /**
+ * Whether the current user may create and delete the users a scene casts.
+ *
+ * @since 0.12.0
+ *
+ * @return bool Whether the current user can direct scenes.
+ */
+function wp_presence_scene_user_can_direct() {
+	return current_user_can( 'manage_options' ) && current_user_can( 'create_users' ) && current_user_can( 'delete_users' );
+}
+
+/**
+ * Refuses to log in as an actor.
+ *
+ * @since 0.12.0
+ *
+ * @param WP_User|WP_Error $user The user logging in.
+ * @return WP_User|WP_Error The user, or an error for an actor.
+ */
+function wp_presence_scene_authenticate( $user ) {
+	if ( $user instanceof WP_User && get_user_meta( $user->ID, '_wp_presence_scene', true ) ) {
+		return new WP_Error( 'presence_scene_actor', __( 'Scene actors cannot log in.', 'presence-api' ) );
+	}
+
+	return $user;
+}
+
+/**
  * Handles the debugger's start, cut and clear links.
  *
  * @since 0.12.0
  */
 function wp_presence_scene_admin_post() {
-	if ( ! current_user_can( 'manage_options' ) ) {
+	if ( ! wp_presence_scene_user_can_direct() ) {
 		wp_die( esc_html__( 'Sorry, you are not allowed to direct scenes.', 'presence-api' ), 403 );
 	}
 
@@ -462,7 +734,7 @@ function wp_presence_scene_admin_post() {
  * @return array The Heartbeat response.
  */
 function wp_presence_scene_heartbeat_received( $response, $data ) {
-	if ( empty( $data['presence-scene'] ) || ! current_user_can( 'manage_options' ) ) {
+	if ( empty( $data['presence-scene'] ) || ! wp_presence_scene_user_can_direct() ) {
 		return $response;
 	}
 
@@ -545,7 +817,7 @@ function wp_presence_scene_exit( array $scene ) {
  * @param WP_Admin_Bar $wp_admin_bar The admin bar instance.
  */
 function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
-	$scenes = wp_get_presence_scenes();
+	$scenes = wp_presence_scene_user_can_direct() ? wp_get_presence_scenes() : array();
 
 	if ( ! $scenes ) {
 		return;
@@ -784,158 +1056,9 @@ JS
  * @since 0.12.0
  */
 function wp_presence_register_default_scenes() {
-	wp_register_presence_scene(
-		'presence-api/lock-takeover',
-		array(
-			'label' => __( 'Lock takeover', 'presence-api' ),
-			'cast'  => array( array( 'role' => 'editor' ), array( 'role' => 'editor' ) ),
-			'cues'  => array(
-				array(
-					'after'    => 0,
-					'label'    => __( 'Actor 1 and Actor 2 enter', 'presence-api' ),
-					'callback' => function ( $cast ) {
-						$cast[0]->enter( 'dashboard' );
-						$cast[1]->enter( 'dashboard' );
-					},
-				),
-				array(
-					'after'    => 5,
-					'label'    => __( 'Actor 1 opens a draft', 'presence-api' ),
-					'callback' => function ( $cast ) {
-						$cast[0]->open( $cast[0]->write( __( 'Quarterly budget', 'presence-api' ) ) );
-					},
-				),
-				array(
-					'after'    => 20,
-					'label'    => __( 'Actor 2 opens it and finds it locked', 'presence-api' ),
-					'callback' => function ( $cast ) {
-						$cast[1]->open( $cast[0]->post() );
-						wp_presence_scene_expect( $cast[1]->sees_lock( $cast[0]->post() ) === $cast[0]->ID, __( 'Actor 2 does not see Actor 1 holding the lock.', 'presence-api' ) );
-					},
-				),
-				array(
-					'after'    => 35,
-					'label'    => __( 'Actor 2 takes over', 'presence-api' ),
-					'callback' => function ( $cast ) {
-						$cast[1]->take_over( $cast[0]->post() );
-						wp_presence_scene_expect( $cast[0]->sees_lock( $cast[0]->post() ) === $cast[1]->ID, __( 'Actor 1 does not see Actor 2 holding the lock.', 'presence-api' ) );
-					},
-				),
-				array(
-					'after'    => 45,
-					'label'    => __( 'Actor 2 saves a revision', 'presence-api' ),
-					'callback' => function ( $cast ) {
-						$cast[1]->type( $cast[0]->post(), __( 'Moved the travel line into operations.', 'presence-api' ) );
-					},
-				),
-				array(
-					'after'    => 60,
-					'label'    => __( 'Actor 1 and Actor 2 log out', 'presence-api' ),
-					'callback' => function ( $cast ) {
-						$cast[0]->leave();
-						$cast[1]->leave();
-					},
-				),
-			),
-		)
-	);
-
-	$team     = array(
-		array(
-			'after'    => 0,
-			'label'    => __( 'Actor 1 enters', 'presence-api' ),
-			'callback' => function ( $cast ) {
-				$cast[0]->enter( 'dashboard' );
-			},
-		),
-	);
-	$arrivals = array(
-		__( 'Actor 2 enters', 'presence-api' ),
-		__( 'Actor 3 enters', 'presence-api' ),
-		__( 'Actor 4 enters', 'presence-api' ),
-	);
-	foreach ( $arrivals as $i => $label ) {
-		$team[] = array(
-			'after'    => 6 * ( $i + 1 ),
-			'label'    => $label,
-			'callback' => function ( $cast ) use ( $i ) {
-				$cast[ $i + 1 ]->enter( 'dashboard' );
-			},
-		);
+	foreach ( glob( dirname( __DIR__ ) . '/scenes/*.json' ) as $file ) {
+		wp_register_presence_scene( $file );
 	}
-	$titles = array(
-		__( 'Launch checklist', 'presence-api' ),
-		__( 'Interview questions', 'presence-api' ),
-		__( 'Style guide updates', 'presence-api' ),
-		__( 'Weekly roundup', 'presence-api' ),
-	);
-	foreach ( $titles as $i => $title ) {
-		$team[] = array(
-			'after'    => 30 + 6 * $i,
-			/* translators: 1: Actor name, 2: Post title. */
-			'label'    => sprintf( __( '%1$s opens "%2$s"', 'presence-api' ), wp_presence_scene_actor_name( $i ), $title ),
-			'callback' => function ( $cast ) use ( $i, $title ) {
-				$cast[ $i ]->open( $cast[ $i ]->write( $title ) );
-			},
-		);
-	}
-	$team[] = array(
-		'after'    => 75,
-		'label'    => __( 'The cast logs out', 'presence-api' ),
-		'callback' => function ( $cast ) {
-			foreach ( $cast as $actor ) {
-				$actor->leave();
-			}
-		},
-	);
-
-	wp_register_presence_scene(
-		'presence-api/small-team',
-		array(
-			'label' => __( 'Small team', 'presence-api' ),
-			'cast'  => array( array( 'role' => 'author' ), array( 'role' => 'author' ), array( 'role' => 'editor' ), array( 'role' => 'editor' ) ),
-			'cues'  => $team,
-		)
-	);
-
-	$aged_out = 25 + wp_presence_get_timeout() + 5;
-	wp_register_presence_scene(
-		'presence-api/connection-lost',
-		array(
-			'label' => __( 'Connection lost', 'presence-api' ),
-			'cast'  => array( array( 'role' => 'author' ) ),
-			'cues'  => array(
-				array(
-					'after'    => 0,
-					'label'    => __( 'Actor 1 enters', 'presence-api' ),
-					'callback' => function ( $cast ) {
-						$cast[0]->enter( 'dashboard' );
-					},
-				),
-				array(
-					'after'    => 5,
-					'label'    => __( 'Actor 1 opens a draft', 'presence-api' ),
-					'callback' => function ( $cast ) {
-						$cast[0]->open( $cast[0]->write( __( 'Field notes', 'presence-api' ) ) );
-					},
-				),
-				array(
-					'after'    => 25,
-					'label'    => __( 'Actor 1 loses connection', 'presence-api' ),
-					'callback' => function ( $cast ) {
-						$cast[0]->drop();
-					},
-				),
-				array(
-					'after'    => $aged_out,
-					'label'    => __( 'Actor 1 ages out', 'presence-api' ),
-					'callback' => function ( $cast ) {
-						wp_presence_scene_expect( ! $cast[0]->is_present(), __( 'Actor 1 is still listed online after their rows expired.', 'presence-api' ) );
-					},
-				),
-			),
-		)
-	);
 }
 
 /**

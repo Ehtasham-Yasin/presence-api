@@ -1,0 +1,12 @@
+{
+	"$schema": "../schemas/scene.json",
+	"name": "presence-api/connection-lost",
+	"title": "Connection lost",
+	"cast": [ { "role": "author" } ],
+	"cues": [
+		{ "at": 0, "actor": 1, "action": "visit", "place": "dashboard" },
+		{ "at": 5, "actor": 1, "action": "write", "title": "Garden plan" },
+		{ "at": 25, "actor": 1, "action": "drop" },
+		{ "at": "25+ttl+5", "actor": 1, "action": "check", "expect": "offline" }
+	]
+}

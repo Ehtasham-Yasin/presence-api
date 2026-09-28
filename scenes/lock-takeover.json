@@ -1,0 +1,15 @@
+{
+	"$schema": "../schemas/scene.json",
+	"name": "presence-api/lock-takeover",
+	"title": "Lock takeover",
+	"cast": [ { "role": "editor" }, { "role": "editor" } ],
+	"cues": [
+		{ "at": 0, "actor": 1, "action": "visit", "place": "posts" },
+		{ "at": 5, "actor": 1, "action": "write", "title": "Launch checklist" },
+		{ "at": 20, "actor": 2, "action": "visit", "place": "posts" },
+		{ "at": 25, "actor": 2, "action": "check", "expect": "locked", "post": 1 },
+		{ "at": 35, "actor": 2, "action": "takeOver", "post": 1 },
+		{ "at": 45, "actor": 2, "action": "type", "post": 1, "text": "Second pass on the checklist." },
+		{ "at": 60, "actor": "cast", "action": "leave" }
+	]
+}

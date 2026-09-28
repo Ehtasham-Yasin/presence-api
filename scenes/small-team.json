@@ -1,0 +1,17 @@
+{
+	"$schema": "../schemas/scene.json",
+	"name": "presence-api/small-team",
+	"title": "Small team",
+	"cast": [ { "role": "author" }, { "role": "author" }, { "role": "editor" }, { "role": "editor" } ],
+	"cues": [
+		{ "at": 0, "actor": 1, "action": "visit", "place": "dashboard" },
+		{ "at": 8, "actor": 2, "action": "visit", "place": "dashboard" },
+		{ "at": 16, "actor": 3, "action": "visit", "place": "dashboard" },
+		{ "at": 24, "actor": 4, "action": "visit", "place": "dashboard" },
+		{ "at": 30, "actor": 1, "action": "write", "title": "Volunteer schedule" },
+		{ "at": 36, "actor": 2, "action": "write", "title": "Spring menu" },
+		{ "at": 42, "actor": 3, "action": "write", "title": "Field trip notes" },
+		{ "at": 48, "actor": 4, "action": "write", "title": "Photo walk recap" },
+		{ "at": 75, "actor": "cast", "action": "leave" }
+	]
+}
