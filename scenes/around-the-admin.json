@@ -3,21 +3,19 @@
 	"apiVersion": 1,
 	"name": "presence-api/around-the-admin",
 	"title": "Around the admin",
-	"cast": [ { "role": "editor" }, { "role": "author" }, { "role": "contributor" }, { "role": "subscriber" } ],
+	"cast": [ { "role": "editor" }, { "role": "author" }, { "role": "contributor" }, { "role": "subscriber" }, { "role": "author" } ],
 	"cues": [
 		{ "at": 0, "actor": 1, "action": "visit", "place": "dashboard" },
 		{ "at": 5, "actor": 2, "action": "visit", "place": "posts" },
 		{ "at": 10, "actor": 3, "action": "visit", "place": "dashboard" },
 		{ "at": 15, "actor": 4, "action": "visit", "place": "profile" },
-		{ "at": 20, "actor": "cast", "action": "checkOnline" },
-		{ "at": 26, "actor": 1, "action": "visit", "place": "comments" },
-		{ "at": 32, "actor": 2, "action": "visit", "place": "media" },
-		{ "at": 38, "actor": 3, "action": "visit", "place": "posts" },
-		{ "at": 44, "actor": 4, "action": "leave" },
-		{ "at": 48, "actor": 4, "action": "checkOffline" },
-		{ "at": 54, "actor": 1, "action": "visit", "place": "pages" },
-		{ "at": 60, "actor": 2, "action": "visit", "place": "dashboard" },
-		{ "at": 66, "actor": 3, "action": "leave" },
-		{ "at": 75, "actor": "cast", "action": "leave" }
+		{ "at": 20, "actor": 5, "action": "visit", "place": "media" },
+		{ "at": 22, "actor": "cast", "action": "checkOnline" },
+		{ "at": 25, "actor": 5, "action": "leave" },
+		{ "at": 30, "actor": 4, "action": "leave" },
+		{ "at": 35, "actor": 3, "action": "leave" },
+		{ "at": 40, "actor": 2, "action": "leave" },
+		{ "at": 45, "actor": 1, "action": "leave" },
+		{ "at": 47, "actor": "cast", "action": "checkOffline" }
 	]
 }
