@@ -36,7 +36,6 @@ function wp_presence_debugger_admin_bar_node( $wp_admin_bar ) {
 	);
 
 	$rows = array(
-		'next'     => __( 'Next beat', 'presence-api' ),
 		'interval' => __( 'Interval', 'presence-api' ),
 		'ttl'      => __( 'TTL', 'presence-api' ),
 	);
@@ -209,7 +208,6 @@ function wp_presence_debugger_admin_bar_assets() {
 		#wpadminbar #wp-admin-bar-presence-debug.is-pinned > .ab-item::after { content: "\\f537"; font: 16px/32px dashicons; margin-inline-start: 6px; vertical-align: top; }
 		.admin-color-light #wpadminbar #wp-admin-bar-presence-debug.is-lost .ab-icon::before { color: #996800; }
 		#wp-admin-bar-presence-debug .presence-debug-countdown { min-width: 2.5em; font-variant-numeric: tabular-nums; }
-		#wp-admin-bar-presence-debug.is-pinned .presence-debug-countdown { display: none; }
 		#wp-admin-bar-presence-debug.is-beating .ab-icon { animation: presence-debug-heart 2s cubic-bezier(0.22, 0.61, 0.36, 1); }
 		@keyframes presence-debug-heart { 0% { transform: scale(1); } 5% { transform: scale(1.45); } 14% { transform: scale(0.92); } 22% { transform: scale(1.3); } 32% { transform: scale(0.97); } 42%, 100% { transform: scale(1); } }
 		#wpadminbar #wp-admin-bar-presence-debug > .ab-sub-wrapper { min-width: 320px; max-height: calc(100vh - 64px); overflow-y: auto; }
@@ -226,7 +224,6 @@ function wp_presence_debugger_admin_bar_assets() {
 	';
 
 	$i18n = array(
-		'now'        => __( 'Now', 'presence-api' ),
 		'fast'       => __( 'fast', 'presence-api' ),
 		'background' => __( 'background or idle', 'presence-api' ),
 		'suspended'  => __( 'Suspended', 'presence-api' ),
@@ -243,7 +240,6 @@ function wp_presence_debugger_admin_bar_assets() {
 			const i18n = %s;
 			const lang = document.documentElement.lang || undefined;
 			const seconds = new Intl.NumberFormat( lang, { style: "unit", unit: "second", unitDisplay: "narrow" } );
-			const relative = new Intl.RelativeTimeFormat( lang, { numeric: "always" } );
 			let lastSend = Date.now();
 			let table = null;
 
@@ -260,9 +256,7 @@ function wp_presence_debugger_admin_bar_assets() {
 				node.querySelector( ".presence-debug-countdown" ).textContent = state ? i18n[ state ] : seconds.format( Math.max( 0, left ) );
 				node.querySelectorAll( "[data-presence-debug]" ).forEach( function ( el ) {
 					const key = el.dataset.presenceDebug;
-					if ( "next" === key ) {
-						el.textContent = "suspended" === state ? i18n.suspended : ( left > 0 ? relative.format( left, "second" ) : i18n.now );
-					} else if ( "interval" === key ) {
+					if ( "interval" === key ) {
 						const mode = focused ? ( 5 === period ? i18n.fast : "" ) : i18n.background;
 						el.textContent = seconds.format( period ) + ( mode ? " (" + mode + ")" : "" );
 					} else if ( el.dataset.presenceDebugSeconds ) {
