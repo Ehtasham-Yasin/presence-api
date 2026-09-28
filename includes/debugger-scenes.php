@@ -532,7 +532,9 @@ function wp_presence_scene_direct() {
 		if ( isset( $run['done'][ $i ] ) || (int) $cue['after'] > $elapsed ) {
 			continue;
 		}
-		$run['done'][ $i ] = 'pass';
+		// Saved as failed first, so a fatal error cannot replay the cue on the next beat.
+		$run['done'][ $i ] = 'fail';
+		update_option( 'wp_presence_scene', $run, false );
 
 		$warnings = array();
 		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_set_error_handler -- Collects the cue's warnings for the report.
@@ -545,9 +547,9 @@ function wp_presence_scene_direct() {
 
 		try {
 			wp_presence_scene_perform( $cue, $cast, $run );
+			$run['done'][ $i ] = 'pass';
 			wp_presence_scene_note( $run, 'pass', $cue['label'] );
 		} catch ( Throwable $e ) {
-			$run['done'][ $i ] = 'fail';
 			wp_presence_scene_note( $run, 'fail', $cue['label'] . ': ' . $e->getMessage() );
 		} finally {
 			restore_error_handler();
@@ -596,7 +598,22 @@ function wp_presence_scene_strike( array $run ) {
 
 	$before = count( $run['notes'] );
 
-	// Deleting a user only trashes their posts, so the scene's own go first.
+	// Deleting a user only trashes their posts, so the scene's own go first, including any a fatal error left unrecorded.
+	$run['posts'] = array_unique(
+		array_merge(
+			$run['posts'],
+			$run['cast'] ? get_posts(
+				array(
+					'author__in'       => $run['cast'],
+					'post_type'        => 'any',
+					'post_status'      => 'any',
+					'fields'           => 'ids',
+					'numberposts'      => -1,
+					'suppress_filters' => true,
+				)
+			) : array()
+		)
+	);
 	foreach ( $run['posts'] as $post_id ) {
 		wp_delete_post( $post_id, true );
 	}
