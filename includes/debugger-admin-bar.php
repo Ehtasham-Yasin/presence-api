@@ -106,6 +106,17 @@ function wp_presence_debugger_admin_bar_node( $wp_admin_bar ) {
 			}
 		}
 		$shared = null !== $mine && count( $people[ $mine ] ) > 1 ? $mine : null;
+		$here   = array();
+		$rest   = array();
+		foreach ( $rows as $row ) {
+			if ( $page( $row ) === $mine ) {
+				$here[] = $row;
+			} else {
+				$rest[] = $row;
+			}
+		}
+		// Your page comes first, so the row limit never hides who is with you.
+		$rows = array_merge( $here, $rest );
 		foreach ( array_slice( $rows, 0, 20 ) as $j => $row ) {
 			$user = get_userdata( (int) $row->user_id );
 			$age  = max( 0, time() - (int) strtotime( $row->date_gmt . ' UTC' ) );
