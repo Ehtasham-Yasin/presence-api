@@ -93,17 +93,7 @@ function wp_presence_debugger_admin_bar_node( $wp_admin_bar ) {
 				array(
 					'parent' => 'presence-debug-rooms',
 					'id'     => $group . '-' . $j,
-					'title'  => '<span>' . get_avatar(
-						$row->user_id,
-						16,
-						'',
-						'',
-						array(
-							'class'      => 'presence-bar-avatar',
-							'extra_attr' => 'style="outline-color:' . esc_attr( wp_presence_entry_color( $row ) ) . '"',
-							'loading'    => false,
-						)
-					) . esc_html( $user ? $user->display_name : '#' . $row->user_id ) . ' <code>' . esc_html( $row->client_id ) . '</code></span><span class="presence-debug-value" data-presence-debug-age="' . esc_attr( $age ) . '"></span>',
+					'title'  => '<span><span class="presence-debug-color" style="background:' . esc_attr( wp_presence_entry_color( $row ) ) . '" aria-hidden="true"></span>' . esc_html( $user ? $user->display_name : '#' . $row->user_id ) . ' <code>' . esc_html( $row->client_id ) . '</code></span><span class="presence-debug-value" data-presence-debug-age="' . esc_attr( $age ) . '"></span>',
 					'meta'   => array( 'class' => 'presence-debug-row' ),
 				)
 			);
@@ -239,7 +229,7 @@ function wp_presence_debugger_admin_bar_assets() {
 		#wpadminbar #wp-admin-bar-presence-debug .ab-submenu .ab-item, #wpadminbar #wp-admin-bar-presence-debug .ab-submenu .ab-item > * { line-height: 1.4; }
 		#wp-admin-bar-presence-debug .presence-debug-row > .ab-item { gap: 16px; cursor: default; }
 		#wp-admin-bar-presence-debug .presence-debug-value { margin-inline-start: auto; font-variant-numeric: tabular-nums; user-select: none; }
-		#wpadminbar #wp-admin-bar-presence-debug .presence-debug-row .presence-bar-avatar { width: 16px; height: 16px; margin-inline-end: 8px; border-radius: 50%; outline: 2px solid; vertical-align: text-bottom; }
+		#wpadminbar #wp-admin-bar-presence-debug .presence-debug-color { display: inline-block; width: 8px; height: 8px; margin-inline-end: 8px; border-radius: 50%; }
 		#wp-admin-bar-presence-debug .presence-debug-table .dashicons { font: 16px/1 dashicons; margin-inline-start: 4px; vertical-align: text-bottom; }
 		#wp-admin-bar-presence-debug code { padding: 0; background: none; color: inherit; font-size: 12px; font-weight: inherit; line-height: inherit; }
 		#wp-admin-bar-presence-debug .presence-debug-room > .ab-item { font-weight: 600; cursor: default; }
