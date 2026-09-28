@@ -1119,11 +1119,9 @@ function wp_presence_scene_assets() {
 		if ( scene.watch && new URL( scene.watch ).pathname !== window.location.pathname ) {
 			window.location.assign( scene.watch );
 		}
-		// After the idle backoff, which would otherwise widen the interval between cues.
+		// Cues play on this tab's beats, which core slows to two minutes while the window is out of focus.
 		if ( scene.running ) {
-			window.setTimeout( function () {
-				wp.heartbeat.interval( "fast" );
-			} );
+			window.setTimeout( wp.heartbeat.connectNow, 1000 );
 		}
 	} );
 
