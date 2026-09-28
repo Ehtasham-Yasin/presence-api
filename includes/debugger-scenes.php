@@ -596,8 +596,6 @@ function wp_presence_scene_strike( array $run ) {
 		require_once ABSPATH . 'wp-admin/includes/ms.php';
 	}
 
-	$before = count( $run['notes'] );
-
 	// Deleting a user only trashes their posts, so the scene's own go first, including any a fatal error left unrecorded.
 	$run['posts'] = array_unique(
 		array_merge(
@@ -647,7 +645,6 @@ function wp_presence_scene_strike( array $run ) {
 		}
 	}
 
-	$cleaned  = count( $run['notes'] ) === $before;
 	$problems = count(
 		array_filter(
 			$run['notes'],
@@ -670,12 +667,11 @@ function wp_presence_scene_strike( array $run ) {
 	update_option(
 		'wp_presence_scene_notes',
 		array(
-			'run'     => $run['run'],
-			'name'    => $run['name'],
-			'label'   => $run['label'],
-			'done'    => $run['done'],
-			'cleaned' => $cleaned,
-			'notes'   => $run['notes'],
+			'run'   => $run['run'],
+			'name'  => $run['name'],
+			'label' => $run['label'],
+			'done'  => $run['done'],
+			'notes' => $run['notes'],
 		),
 		false
 	);
@@ -855,21 +851,6 @@ function wp_presence_scene_casting( array $scene ) {
 }
 
 /**
- * Narrates the cleanup after a scene, such as "The cast exits".
- *
- * @since 0.12.0
- *
- * @param array $scene A registered scene.
- * @return string
- */
-function wp_presence_scene_exit( array $scene ) {
-	return 1 === count( $scene['cast'] )
-		/* translators: %s: Actor name. */
-		? sprintf( __( '%s exits', 'presence-api' ), wp_presence_scene_actor_name( 0 ) )
-		: __( 'The cast exits', 'presence-api' );
-}
-
-/**
  * Adds a Scenes section to the debugger menu, listing every step a scene will take before it can run.
  *
  * @since 0.12.0
@@ -919,7 +900,7 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 
 		if ( $running ) {
 			/* translators: 1: Steps played, 2: Total steps. */
-			$value = sprintf( __( '%1$s / %2$s', 'presence-api' ), number_format_i18n( count( $run['done'] ) + 1 ), number_format_i18n( count( $scene['cues'] ) + 2 ) );
+			$value = sprintf( __( '%1$s / %2$s', 'presence-api' ), number_format_i18n( count( $run['done'] ) + 1 ), number_format_i18n( count( $scene['cues'] ) + 1 ) );
 		} elseif ( $result ) {
 			// The last note is the summary, which only counts the others.
 			$problems = array_filter(
@@ -949,6 +930,7 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 			array(
 				'label' => wp_presence_scene_casting( $scene ),
 				'after' => null,
+				'class' => ' presence-debug-cast',
 				'state' => $result ? 'pass' : 'pending',
 			),
 		);
@@ -956,14 +938,10 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 			$steps[] = array(
 				'label' => $cue['label'],
 				'after' => (int) $cue['after'],
+				'class' => '',
 				'state' => isset( $result['done'][ $i ] ) ? ( 'fail' === $result['done'][ $i ] ? 'fail' : 'pass' ) : 'pending',
 			);
 		}
-		$steps[] = array(
-			'label' => wp_presence_scene_exit( $scene ),
-			'after' => $scene['duration'],
-			'state' => isset( $result['cleaned'] ) && ! $running ? ( $result['cleaned'] ? 'pass' : 'fail' ) : 'pending',
-		);
 
 		$hidden = 'presence-debug-for-' . $slug . ( $shown ? '' : ' is-hidden' );
 
@@ -974,7 +952,7 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 					'id'     => 'presence-debug-scene-' . $slug . '-step-' . $i,
 					'title'  => '<span class="presence-debug-step-mark" aria-hidden="true"></span><span><span class="screen-reader-text">' . esc_html( $marks[ $step['state'] ] ) . ' </span>' . esc_html( $step['label'] ) . '</span>'
 						. ( null !== $step['after'] ? '<span class="presence-debug-value">' . esc_html( $step['after'] . 's' ) . '</span>' : '' ),
-					'meta'   => array( 'class' => 'presence-debug-step is-' . $step['state'] . ' ' . $hidden ),
+					'meta'   => array( 'class' => 'presence-debug-step is-' . $step['state'] . $step['class'] . ( $result ? ' has-run' : '' ) . ' ' . $hidden ),
 				)
 			);
 		}
@@ -992,18 +970,15 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 
 		/* translators: %s: Scene label. */
 		$plan = sprintf( __( 'Run "%s"?', 'presence-api' ), $scene['label'] ) . "\n\n"
-			/* translators: 1: Who is cast, 2: Duration in seconds, 3: Who exits. */
-			. sprintf( __( '%1$s. After %2$ss: %3$s.', 'presence-api' ), wp_presence_scene_casting( $scene ), $scene['duration'], wp_presence_scene_exit( $scene ) );
+			/* translators: 1: Who is cast, 2: Duration in seconds. */
+			. sprintf( __( '%1$s. Runs for %2$ss.', 'presence-api' ), wp_presence_scene_casting( $scene ), $scene['duration'] );
 
 		$wp_admin_bar->add_node(
 			array(
 				'parent' => 'presence-debug-scenes',
 				'id'     => 'presence-debug-scene-' . $slug . '-action',
 				'title'  => '<span class="presence-debug-scene-icon" aria-hidden="true"></span><span>' . esc_html( $running ? __( 'Stop scene', 'presence-api' ) : ( $result ? __( 'Run again', 'presence-api' ) : __( 'Run scene', 'presence-api' ) ) ) . '</span>'
-					. ( $running ? '' : '<span class="presence-debug-value">'
-						/* translators: 1: Number of actors, 2: Duration in seconds. */
-						. esc_html( sprintf( _n( '%1$s actor, %2$ss', '%1$s actors, %2$ss', count( $scene['cast'] ), 'presence-api' ), number_format_i18n( count( $scene['cast'] ) ), $scene['duration'] ) )
-						. '</span><span class="presence-debug-scene-plan" hidden>' . esc_html( $plan ) . '</span>' ),
+					. ( $running ? '' : '<span class="presence-debug-scene-plan" hidden>' . esc_html( $plan ) . '</span>' ),
 				'href'   => wp_nonce_url(
 					add_query_arg(
 						array(
@@ -1066,6 +1041,8 @@ function wp_presence_scene_assets() {
 		#wpadminbar #wp-admin-bar-presence-debug-scenes :is(.presence-debug-step, .presence-debug-scene-start, .presence-debug-scene-cut, .presence-debug-scene-clear) > .ab-item { padding-inline-start: 34px; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-step > .ab-item { min-height: 22px; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-step > .ab-item, #wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-step > .ab-item * { white-space: nowrap; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-cast > .ab-item > span:last-child { max-width: 360px; white-space: normal; line-height: 1.5; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-step:not(.has-run) .presence-debug-step-mark { visibility: hidden; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-step-mark::before { content: ""; box-sizing: border-box; width: 10px; height: 10px; margin-inline: 3px 11px; border: 1.5px solid currentColor; border-radius: 50%; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes :is(.is-pass, .is-fail) .presence-debug-step-mark::before { width: 16px; height: auto; margin-inline: 0 8px; border: 0; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .is-pass .presence-debug-step-mark::before { content: "\\f147"; }
