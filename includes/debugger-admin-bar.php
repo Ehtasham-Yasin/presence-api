@@ -203,6 +203,8 @@ function wp_presence_debugger_admin_bar_assets() {
 		#wp-admin-bar-presence-debug > .ab-item { display: flex !important; align-items: center; gap: 6px; cursor: default; }
 		#wp-admin-bar-presence-debug .ab-icon { margin: 0 !important; }
 		#wpadminbar #wp-admin-bar-presence-debug .ab-icon::before { content: "\\f487"; top: 2px; }
+		#wpadminbar #wp-admin-bar-presence-debug.is-pinned > .ab-item { color: var(--presence-debug-open-color); background: var(--presence-debug-open-background); }
+		#wpadminbar #wp-admin-bar-presence-debug.is-pinned .ab-icon::before { color: inherit; }
 		#wpadminbar #wp-admin-bar-presence-debug.is-beating .ab-icon::before { color: #d63638; }
 		#wpadminbar #wp-admin-bar-presence-debug.is-lost .ab-icon::before { color: #dba617; }
 		#wpadminbar #wp-admin-bar-presence-debug.is-pinned > .ab-item::after { content: "\\f537"; font: 16px/32px dashicons; margin-inline-start: 6px; vertical-align: top; }
@@ -313,6 +315,16 @@ function wp_presence_debugger_admin_bar_assets() {
 			new MutationObserver( function () {
 				window.requestAnimationFrame( reposition );
 			} ).observe( document.getElementById( "wpadminbar" ), { attributes: true, attributeFilter: [ "class" ], subtree: true } );
+
+			// Core applies the open-menu colors only while hovered, so a probe borrows them.
+			const probe = document.createElement( "li" );
+			probe.className = "menupop hover";
+			probe.appendChild( document.createElement( "span" ) ).className = "ab-item";
+			document.getElementById( "wp-admin-bar-top-secondary" ).appendChild( probe );
+			const open = window.getComputedStyle( probe.firstChild );
+			node.style.setProperty( "--presence-debug-open-color", open.color );
+			node.style.setProperty( "--presence-debug-open-background", open.backgroundColor );
+			probe.remove();
 
 			function pin( pinned ) {
 				node.classList.toggle( "is-pinned", pinned );
