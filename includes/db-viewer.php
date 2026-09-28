@@ -39,10 +39,8 @@ add_action(
 			);
 		}
 
-		$ttl         = wp_presence_get_timeout();
-		$now_ms      = (int) ( microtime( true ) * 1000 );
-		$max_visible = 10;
-		$is_embedded = isset( $_SERVER['HTTP_SEC_FETCH_DEST'] ) && 'iframe' === $_SERVER['HTTP_SEC_FETCH_DEST'];
+		$ttl    = wp_presence_get_timeout();
+		$now_ms = (int) ( microtime( true ) * 1000 );
 
 		header( 'Content-Type: text/html; charset=utf-8' );
 		header( 'Cache-Control: no-store' );
@@ -56,7 +54,6 @@ add_action(
 <style>
 	* { margin: 0; padding: 0; box-sizing: border-box; }
 	body { font: 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif; background: var(--wp-admin-background, #fff); color: var(--wp-admin-text, #50575e); padding: 0; overflow: auto; }
-	body.is-embedded { overflow: hidden; }
 
 	table { border-collapse: collapse; width: 100%; table-layout: fixed; }
 	th { text-align: left; padding: 4px 6px; color: var(--wp-admin-muted, #646970); font-size: 10px; text-transform: uppercase; letter-spacing: 0.3px; border-bottom: 1px solid var(--wp-admin-border, #f0f0f1); }
@@ -75,7 +72,7 @@ add_action(
 	.empty { color: var(--wp-admin-muted, #646970); padding: 12px 6px; }
 </style>
 </head>
-<body<?php echo $is_embedded ? ' class="is-embedded"' : ''; ?>>
+<body>
 
 <p class="empty"<?php echo ! empty( $rows ) ? ' style="display:none"' : ''; ?>><?php esc_html_e( 'No entries.', 'presence-api' ); ?></p>
 		<?php if ( ! empty( $rows ) ) : ?>
@@ -85,11 +82,7 @@ add_action(
 </thead>
 <tbody>
 			<?php
-			$row_limit = $is_embedded ? $max_visible : count( $rows );
-			foreach ( $rows as $i => $row ) :
-				if ( $i >= $row_limit ) {
-					break;
-				}
+			foreach ( $rows as $row ) :
 				$ts_ms = (int) ( strtotime( $row->date_gmt . ' +0000' ) * 1000 );
 				?>
 <tr data-ts="<?php echo esc_attr( $ts_ms ); ?>">
@@ -114,13 +107,6 @@ add_action(
 	<?php endforeach; ?>
 </tbody>
 </table>
-			<?php if ( $is_embedded ) : ?>
-<p class="overflow-link" style="padding:6px;font-size:11px;color:#646970;text-align:center;display:none;">
-	<a href="<?php echo esc_url( wp_nonce_url( home_url( '/?presence-db=1' ), 'wp_presence_db_viewer' ) ); ?>" target="_blank" rel="noopener noreferrer" style="color:var(--wp-admin-muted, #646970);text-decoration:none;">
-		<span class="overflow-count"></span> &#8599;
-	</a>
-</p>
-	<?php endif; ?>
 	<?php endif; ?>
 
 <script>
@@ -128,15 +114,6 @@ add_action(
 	var serverNow = <?php echo (int) $now_ms; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Integer cast. ?>;
 	var offset = serverNow - Date.now();
 	var TTL = <?php echo (int) $ttl; ?>;
-	var allTimestamps = 
-		<?php
-		$all_ts = array();
-		foreach ( $rows as $row ) {
-			$all_ts[] = (int) ( strtotime( $row->date_gmt . ' +0000' ) * 1000 );
-		}
-		echo wp_json_encode( $all_ts );
-		?>
-	;
 	function tick(){
 		var now = Date.now() + offset;
 		var visible = 0;
@@ -155,19 +132,8 @@ add_action(
 		});
 		var table = document.querySelector('table');
 		var empty = document.querySelector('.empty');
-		var overflowEl = document.querySelector('.overflow-link');
-		var overflowCount = document.querySelector('.overflow-count');
 		if (table) table.style.display = visible ? '' : 'none';
 		if (empty) empty.style.display = visible ? 'none' : '';
-		if (overflowEl && overflowCount) {
-			var maxVisible = <?php echo (int) $max_visible; ?>;
-			var totalAlive = allTimestamps.filter(function(ts) {
-				return Math.round((now - ts) / 1000) < TTL;
-			}).length;
-			var extra = Math.max(0, totalAlive - maxVisible);
-			overflowEl.style.display = extra > 0 ? '' : 'none';
-			overflowCount.textContent = '+' + extra + ' more rows';
-		}
 	}
 	tick();
 	setInterval(tick, 1000);
