@@ -98,6 +98,9 @@ add_action(
 				<?php
 				$decoded = json_decode( $row->data, true );
 				if ( is_array( $decoded ) ) {
+					if ( ! current_user_can( 'view_presence_location', (int) $row->user_id ) ) {
+						unset( $decoded['screen'], $decoded['post_id'], $decoded['object_id'] );
+					}
 					$pairs = array();
 					foreach ( $decoded as $k => $v ) {
 							$swatch  = 'color' === $k && is_string( $v ) && sanitize_hex_color( $v ) ? '<span class="swatch" style="background:' . esc_attr( $v ) . '"></span>' : '';

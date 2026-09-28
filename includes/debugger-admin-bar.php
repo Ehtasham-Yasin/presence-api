@@ -92,6 +92,9 @@ function wp_presence_debugger_admin_bar_node( $wp_admin_bar ) {
 
 		// Colors only mark who shares your page, as in the app.
 		$page   = function ( $row ) use ( $room ) {
+			if ( ! current_user_can( 'view_presence_location', (int) $row->user_id ) ) {
+				return 'user:' . $row->user_id;
+			}
 			return wp_presence_admin_room() === $room ? ( $row->data['screen'] ?? '' ) . ':' . ( $row->data['post_id'] ?? '' ) . ':' . ( $row->data['object_id'] ?? '' ) : $room;
 		};
 		$people = array();
