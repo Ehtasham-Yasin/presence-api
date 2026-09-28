@@ -62,7 +62,7 @@
 	},
 	"definitions": {
 		"at": {
-			"description": "Seconds after curtain up, never earlier than the cue before. A TTL offset such as \"25+ttl+5\" follows the site's presence timeout.",
+			"description": "Seconds from the start, never earlier than the cue before. A TTL offset such as \"25+ttl+5\" follows the site's presence timeout.",
 			"oneOf": [
 				{
 					"type": "integer",
