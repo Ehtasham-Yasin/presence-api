@@ -1141,7 +1141,12 @@ function wp_presence_scene_assets() {
 		}
 		// Cues play on this tab's beats, which core slows to two minutes while the window is out of focus.
 		if ( scene.running ) {
-			window.setTimeout( wp.heartbeat.connectNow, 1000 );
+			window.setTimeout( function () {
+				wp.heartbeat.interval( "fast" );
+				if ( ! document.hasFocus() ) {
+					window.setTimeout( wp.heartbeat.connectNow, 5000 );
+				}
+			} );
 		}
 	} );
 
