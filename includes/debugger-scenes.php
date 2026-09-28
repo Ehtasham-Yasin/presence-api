@@ -895,7 +895,7 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 			'title'  => esc_html__( 'Scenes', 'presence-api' ),
 			'meta'   => array(
 				'class' => 'presence-debug-scenes-heading',
-				'html'  => is_array( $run ) ? '<a class="presence-debug-scene-button is-follow" href="#" role="button" aria-pressed="' . ( empty( $_COOKIE['wp_presence_scene_follow'] ) ? 'false' : 'true' ) . '"><span>' . esc_html__( 'Follow along', 'presence-api' ) . '</span></a>' : '',
+				'html'  => is_array( $run ) ? '<a class="presence-debug-scene-button is-follow" href="#" role="button" aria-pressed="' . ( empty( $_COOKIE['wp_presence_scene_follow'] ) ? 'false' : 'true' ) . '" title="' . esc_attr__( 'Follow along', 'presence-api' ) . '"><span class="screen-reader-text">' . esc_html__( 'Follow along', 'presence-api' ) . '</span></a>' : '',
 			),
 		)
 	);
@@ -960,8 +960,8 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 				'href'   => '#',
 				'meta'   => array(
 					'class' => 'presence-debug-scene' . ( $shown ? ' is-open' : '' ),
-					// After the controls, so it lines up with the other values at the menu edge.
-					'html'  => $buttons . '<span class="presence-debug-value">' . $value . '</span>',
+					// Fixed slots, so the controls never shift and the status lines up with the other values.
+					'html'  => $buttons . str_repeat( '<span class="presence-debug-scene-button"></span>', 2 - substr_count( $buttons, '<a ' ) ) . '<span class="presence-debug-value">' . $value . '</span>',
 				),
 			)
 		);
@@ -1014,9 +1014,9 @@ function wp_presence_scene_assets() {
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene.is-open .presence-debug-scene-icon::before { content: "\\f347"; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes :is(.presence-debug-scene, .presence-debug-scenes-heading) { display: flex; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scenes-heading > .ab-item { flex: 1; }
-		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scenes-heading .presence-debug-scene-button { width: auto; gap: 6px; white-space: nowrap; padding-inline: 8px 4px; opacity: 1; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scenes-heading .presence-debug-scene-button { justify-content: flex-end; width: auto; padding-inline: 8px 10px; opacity: 1; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene > .ab-item { flex: 1; min-width: 0; }
-		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene > .presence-debug-value { display: flex; flex: none; align-items: center; padding-inline: 4px 10px; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene > .presence-debug-value { display: flex; flex: none; align-items: center; justify-content: flex-end; min-width: 4.5em; padding-inline: 4px 10px; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene.is-open .presence-debug-scene-busy { display: none; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene > .ab-item:not(:last-child) { padding-inline-end: 4px; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-button { display: flex; flex: none; align-items: center; justify-content: center; width: 28px; padding: 0; color: inherit; opacity: 0; }
