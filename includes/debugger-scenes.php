@@ -1044,7 +1044,7 @@ function wp_presence_scene_assets() {
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .is-current .presence-debug-step-mark::before { content: "\\f463"; animation: presence-debug-spin 2s infinite linear; }
 		@media (prefers-reduced-motion: reduce) { #wpadminbar #wp-admin-bar-presence-debug-scenes :is(.presence-debug-scene-busy, .is-current .presence-debug-step-mark)::before { animation: none; } }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-step > .ab-item { min-height: 22px; padding-inline-start: 58px; }
-		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-step-number { min-width: 18px; margin-inline-end: 6px; text-align: end; font-variant-numeric: tabular-nums; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-step-number { min-width: 18px; margin-inline-end: 6px; text-align: end; font-variant-numeric: tabular-nums; opacity: 0.75; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-step.is-current span { font-weight: 600; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-step-mark { margin-inline-start: auto; padding-inline-start: 16px; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-step-mark::before { margin-inline-end: 0; }
