@@ -169,14 +169,8 @@ add_action(
 			overflowCount.textContent = '+' + extra + ' more rows';
 		}
 	}
-	function resize() {
-		if (window.parent !== window) {
-			window.parent.postMessage({ presenceDbHeight: document.body.scrollHeight }, window.location.origin);
-		}
-	}
 	tick();
-	resize();
-	setInterval(function() { tick(); resize(); }, 1000);
+	setInterval(tick, 1000);
 })();
 </script>
 </body>

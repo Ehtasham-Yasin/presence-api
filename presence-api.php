@@ -105,11 +105,6 @@ require_once WP_PRESENCE_PLUGIN_DIR . 'includes/settings.php';
 if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 	// Developer tooling is excluded from the distributed build (see .distignore),
 	// so guard the includes for installs that ship without these files.
-	if ( file_exists( WP_PRESENCE_PLUGIN_DIR . 'includes/debugger-widget.php' ) ) {
-		require_once WP_PRESENCE_PLUGIN_DIR . 'includes/debugger-widget.php';
-		add_action( 'wp_dashboard_setup', 'wp_presence_heartbeat_widget_register' );
-		add_filter( 'heartbeat_received', 'wp_presence_heartbeat_widget_received', 10, 3 );
-	}
 	if ( file_exists( WP_PRESENCE_PLUGIN_DIR . 'includes/debugger-admin-bar.php' ) ) {
 		require_once WP_PRESENCE_PLUGIN_DIR . 'includes/debugger-admin-bar.php';
 		add_action( 'admin_bar_menu', 'wp_presence_debugger_admin_bar_node', 79 );

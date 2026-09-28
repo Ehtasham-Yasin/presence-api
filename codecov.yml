@@ -41,7 +41,6 @@ ignore:
   # WP_DEBUG-only developer tools, not part of the distributed zip (.distignore).
   - "includes/db-viewer.php"
   - "includes/debugger-admin-bar.php"
-  - "includes/debugger-widget.php"
   # Only register hooks, and run during bootstrap before coverage starts.
   - "includes/default-filters.php"
   - "includes/ms-default-filters.php"
