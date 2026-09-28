@@ -211,7 +211,7 @@ function wp_presence_debugger_admin_bar_assets() {
 		#wp-admin-bar-presence-debug .presence-debug-countdown { min-width: 2.5em; font-variant-numeric: tabular-nums; }
 		#wp-admin-bar-presence-debug.is-beating .ab-icon { animation: presence-debug-heart 2s cubic-bezier(0.22, 0.61, 0.36, 1); }
 		@keyframes presence-debug-heart { 0% { transform: scale(1); } 5% { transform: scale(1.45); } 14% { transform: scale(0.92); } 22% { transform: scale(1.3); } 32% { transform: scale(0.97); } 42%, 100% { transform: scale(1); } }
-		#wp-admin-bar-presence-debug .ab-sub-wrapper { max-height: calc(100vh - 64px); overflow-y: auto; }
+		#wpadminbar #wp-admin-bar-presence-debug > .ab-sub-wrapper { min-width: 320px; max-height: calc(100vh - 64px); overflow-y: auto; }
 		#wpadminbar #wp-admin-bar-presence-debug.is-pinned > .ab-sub-wrapper { display: block; }
 		#wp-admin-bar-presence-debug .presence-debug-row > .ab-item { display: flex !important; gap: 16px; cursor: default; }
 		#wp-admin-bar-presence-debug .presence-debug-value { margin-inline-start: auto; font-variant-numeric: tabular-nums; opacity: .8; }
