@@ -928,8 +928,7 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 		$plan = sprintf( __( 'Run "%s"?', 'presence-api' ), $scene['label'] ) . "\n\n"
 			/* translators: 1: Number of users, 2: Actors and their roles. */
 			. sprintf( _n( 'Creates %1$s user: %2$s.', 'Creates %1$s users: %2$s.', count( $scene['cast'] ), 'presence-api' ), number_format_i18n( count( $scene['cast'] ) ), wp_presence_scene_casting( $scene ) ) . "\n\n"
-			/* translators: 1: Scene length in seconds, 2: Minutes until a stranded scene is deleted. */
-			. sprintf( __( 'Deletes them and their posts after %1$s seconds, or after %2$s minutes if this tab closes.', 'presence-api' ), number_format_i18n( $scene['duration'] ), number_format_i18n( ceil( wp_presence_scene_lifetime( $scene ) / MINUTE_IN_SECONDS ) ) );
+			. __( 'Deletes them and their posts when it ends.', 'presence-api' );
 
 		$url     = function ( $args ) {
 			return esc_url( wp_nonce_url( add_query_arg( array( 'action' => 'presence_scene' ) + $args, admin_url( 'admin-post.php' ) ), 'wp_presence_scene' ) );
