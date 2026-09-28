@@ -1070,6 +1070,10 @@ function wp_presence_scene_assets() {
 				row.classList.toggle( "is-hidden", ! shown );
 			} );
 		} );
+		// Live updates skip a focused menu, so a click must not leave focus behind.
+		if ( event.detail ) {
+			this.blur();
+		}
 	} );
 
 	$( document ).on( "click", "#wp-admin-bar-presence-debug-scenes .presence-debug-scene-button.is-start", function ( event ) {
@@ -1085,6 +1089,9 @@ function wp_presence_scene_assets() {
 		const follow = this.getAttribute( "aria-pressed" ) !== "true";
 		this.setAttribute( "aria-pressed", follow );
 		document.cookie = "wp_presence_scene_follow=" + ( follow ? "1" : "" ) + "; path=/; SameSite=Lax";
+		if ( event.detail ) {
+			this.blur();
+		}
 		wp.heartbeat.connectNow();
 	} );
 
