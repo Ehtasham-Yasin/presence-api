@@ -896,7 +896,7 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 		$slug     = str_replace( '/', '-', $name );
 		$running  = is_array( $run ) && $run['name'] === $name;
 		$result   = $running ? $run : ( is_array( $report ) && ( $report['name'] ?? '' ) === $name ? $report : null );
-		$shown    = $running || $open === $slug;
+		$shown    = $running || $result || $open === $slug;
 		$value    = '';
 		$problems = array();
 
@@ -1075,7 +1075,7 @@ function wp_presence_scene_assets() {
 		const slug = scene.classList.contains( "is-open" ) ? "" : scene.id.slice( prefix.length );
 		document.cookie = "wp_presence_scene_open=" + encodeURIComponent( slug ) + "; path=/; SameSite=Lax";
 		document.querySelectorAll( "#wp-admin-bar-presence-debug-scenes .presence-debug-scene" ).forEach( function ( other ) {
-			const open = other.id.slice( prefix.length ) === slug || !! other.parentNode.querySelector( ".presence-debug-for-" + other.id.slice( prefix.length ) + ".presence-debug-scene-cut" );
+			const open = other.id.slice( prefix.length ) === slug || !! other.parentNode.querySelector( ".presence-debug-for-" + other.id.slice( prefix.length ) + ":is(.presence-debug-scene-cut, .presence-debug-scene-clear)" );
 			other.classList.toggle( "is-open", open );
 			other.parentNode.querySelectorAll( ".presence-debug-for-" + other.id.slice( prefix.length ) ).forEach( function ( row ) {
 				row.classList.toggle( "is-hidden", ! open );
