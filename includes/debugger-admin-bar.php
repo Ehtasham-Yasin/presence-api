@@ -215,9 +215,8 @@ function wp_presence_debugger_admin_bar_assets() {
 		#wpadminbar #wp-admin-bar-presence-debug > .ab-sub-wrapper { min-width: 320px; max-height: calc(100vh - 64px); overflow-y: auto; }
 		#wpadminbar #wp-admin-bar-presence-debug.is-pinned > .ab-sub-wrapper { display: block; }
 		#wpadminbar #wp-admin-bar-presence-debug.is-pinned { position: relative; z-index: 1; }
-		#wpadminbar #wp-admin-bar-presence-debug .ab-submenu .ab-item { display: flex; align-items: center; height: auto; min-height: 22px; }
-		#wpadminbar #wp-admin-bar-presence-debug .ab-submenu + .ab-submenu { border-top: 1px solid rgba(128, 128, 128, .3); }
-		#wpadminbar #wp-admin-bar-presence-debug .presence-debug-room:not(:first-child) { margin-top: 6px; }
+		#wpadminbar #wp-admin-bar-presence-debug .ab-submenu .ab-item { display: flex; align-items: center; height: auto; min-height: 26px; }
+		#wpadminbar #wp-admin-bar-presence-debug-rooms :is(.presence-debug-row, .presence-debug-more) > .ab-item { padding-inline-start: 24px; }
 		#wpadminbar #wp-admin-bar-presence-debug .ab-submenu .ab-item, #wpadminbar #wp-admin-bar-presence-debug .ab-submenu .ab-item > * { line-height: 1.4; }
 		#wp-admin-bar-presence-debug .presence-debug-row > .ab-item { gap: 16px; cursor: default; }
 		#wp-admin-bar-presence-debug .presence-debug-value { margin-inline-start: auto; font-variant-numeric: tabular-nums; }
