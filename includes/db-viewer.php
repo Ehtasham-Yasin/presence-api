@@ -32,10 +32,14 @@ add_action(
 		$rows = array();
 
 		if ( wp_presence_has_table() ) {
-			// No user input in this query; table name comes from $wpdb->presence (controlled).
+			$room = isset( $_GET['room'] ) ? sanitize_text_field( wp_unslash( $_GET['room'] ) ) : '';
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$rows = $wpdb->get_results(
-				"SELECT room, user_id, data, date_gmt FROM {$wpdb->presence} ORDER BY date_gmt DESC"
+				$wpdb->prepare(
+					"SELECT room, user_id, data, date_gmt FROM {$wpdb->presence} WHERE %s = '' OR room = %s ORDER BY date_gmt DESC",
+					$room,
+					$room
+				)
 			);
 		}
 
