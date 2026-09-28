@@ -107,10 +107,9 @@ final class WP_Presence_Scene_Actor {
 	}
 
 	/**
-	 * Writes a draft of their own.
+	 * Writes a draft of their own and opens it in the editor.
 	 *
 	 * @param string $title Post title.
-	 * @return int The post ID.
 	 *
 	 * @throws RuntimeException When the post cannot be created.
 	 */
@@ -135,7 +134,7 @@ final class WP_Presence_Scene_Actor {
 
 		$this->run['posts'][] = (int) $post_id;
 
-		return (int) $post_id;
+		$this->open( (int) $post_id );
 	}
 
 	/**
@@ -181,11 +180,12 @@ final class WP_Presence_Scene_Actor {
 	 * Adds a paragraph to a scene post and saves it.
 	 *
 	 * @param int    $post_id Scene post ID.
-	 * @param string $text    Paragraph text.
+	 * @param string $text    Optional. Paragraph text.
 	 *
 	 * @throws RuntimeException When the update fails.
 	 */
-	public function type( $post_id, $text ) {
+	public function type( $post_id, $text = null ) {
+		$text   = $text ?? __( 'Another paragraph.', 'presence-api' );
 		$post   = $this->scene_post( $post_id );
 		$holder = $this->sees_lock( $post->ID );
 		if ( $holder ) {
@@ -258,6 +258,57 @@ final class WP_Presence_Scene_Actor {
 		}
 
 		return false;
+	}
+
+	/**
+	 * Fails unless the online list shows them.
+	 *
+	 * @throws UnexpectedValueException When it does not.
+	 */
+	public function check_online() {
+		if ( ! $this->is_present() ) {
+			throw new UnexpectedValueException( __( 'Not in the online list.', 'presence-api' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Printed as text.
+		}
+	}
+
+	/**
+	 * Fails while the online list still shows them.
+	 *
+	 * @throws UnexpectedValueException When it does.
+	 */
+	public function check_offline() {
+		if ( $this->is_present() ) {
+			throw new UnexpectedValueException( __( 'Still in the online list.', 'presence-api' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Printed as text.
+		}
+	}
+
+	/**
+	 * Fails unless someone else holds a scene post's lock.
+	 *
+	 * @param int $post_id Scene post ID.
+	 *
+	 * @throws UnexpectedValueException When nobody else holds it.
+	 */
+	public function check_locked( $post_id ) {
+		if ( ! $this->sees_lock( $this->scene_post( $post_id )->ID ) ) {
+			throw new UnexpectedValueException( __( 'Nobody else holds it.', 'presence-api' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Printed as text.
+		}
+	}
+
+	/**
+	 * Fails while someone else holds a scene post's lock.
+	 *
+	 * @param int $post_id Scene post ID.
+	 *
+	 * @throws UnexpectedValueException When someone else holds it.
+	 */
+	public function check_unlocked( $post_id ) {
+		$holder = $this->sees_lock( $this->scene_post( $post_id )->ID );
+		if ( $holder ) {
+			$user = get_userdata( $holder );
+			/* translators: %s: Who holds the lock. */
+			throw new UnexpectedValueException( sprintf( __( '%s holds it.', 'presence-api' ), $user ? $user->display_name : '#' . $holder ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Printed as text.
+		}
 	}
 
 	/**

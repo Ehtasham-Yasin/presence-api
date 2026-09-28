@@ -1,5 +1,6 @@
 {
 	"$schema": "../schemas/scene.json",
+	"apiVersion": 1,
 	"name": "presence-api/small-team",
 	"title": "Small team",
 	"cast": [ { "role": "author" }, { "role": "author" }, { "role": "editor" }, { "role": "editor" } ],
