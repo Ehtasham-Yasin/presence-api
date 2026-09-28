@@ -1019,6 +1019,7 @@ function wp_presence_scene_assets() {
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scenes-heading > .presence-debug-scene-icon { display: flex; align-items: center; padding-inline: 6px 10px; cursor: pointer; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scenes-heading .presence-debug-scene-icon::before { margin: 0; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scenes-mark::before { content: "\\f524"; display: block; margin-inline-end: 8px; font: 16px/1 dashicons; }
+		#wpadminbar #wp-admin-bar-presence-debug.is-playing > .ab-item::after { content: "\\f522"; font: 16px/1 dashicons; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene > .ab-item { padding-inline-start: 34px; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene > .ab-item { flex: 1; min-width: 0; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene > .presence-debug-value { display: flex; flex: none; align-items: center; justify-content: flex-end; min-width: 4.5em; padding-inline: 4px 10px; }
@@ -1123,6 +1124,7 @@ function wp_presence_scene_assets() {
 	// Printed once per tab, so a reload does not repeat the report.
 	$( document ).on( "heartbeat-tick", function ( event, data ) {
 		const scene = data[ "presence-scene" ];
+		document.getElementById( "wp-admin-bar-presence-debug" ).classList.toggle( "is-playing", !! ( scene && scene.running ) );
 		if ( ! scene ) {
 			return;
 		}
@@ -1152,6 +1154,7 @@ function wp_presence_scene_assets() {
 	} );
 
 	if ( document.querySelector( "#wp-admin-bar-presence-debug-scenes .presence-debug-scene-busy" ) ) {
+		document.getElementById( "wp-admin-bar-presence-debug" ).classList.add( "is-playing" );
 		wp.heartbeat.interval( "fast" );
 		wp.heartbeat.connectNow();
 	}
