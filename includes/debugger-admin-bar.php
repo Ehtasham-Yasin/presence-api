@@ -84,7 +84,8 @@ function wp_presence_debugger_admin_bar_node( $wp_admin_bar ) {
 		);
 
 		// Reserved rows included, since the plugin's own bookkeeping is part of what is being debugged.
-		foreach ( array_slice( wp_presence_room_rows( $room ), 0, 20 ) as $j => $row ) {
+		$rows = wp_presence_room_rows( $room );
+		foreach ( array_slice( $rows, 0, 20 ) as $j => $row ) {
 			$user = get_userdata( (int) $row->user_id );
 			$age  = max( 0, time() - (int) strtotime( $row->date_gmt . ' UTC' ) );
 			$wp_admin_bar->add_node(
@@ -93,6 +94,17 @@ function wp_presence_debugger_admin_bar_node( $wp_admin_bar ) {
 					'id'     => $group . '-' . $j,
 					'title'  => '<span>' . esc_html( $user ? $user->display_name : '#' . $row->user_id ) . ' <code>' . esc_html( $row->client_id ) . '</code></span><span class="presence-debug-value" data-presence-debug-age="' . esc_attr( $age ) . '"></span>',
 					'meta'   => array( 'class' => 'presence-debug-row' ),
+				)
+			);
+		}
+		if ( count( $rows ) > 20 ) {
+			$wp_admin_bar->add_node(
+				array(
+					'parent' => $group,
+					'id'     => $group . '-more',
+					/* translators: %s: Number of clients not listed. */
+					'title'  => esc_html( sprintf( __( '+%s more', 'presence-api' ), number_format_i18n( count( $rows ) - 20 ) ) ),
+					'meta'   => array( 'class' => 'presence-debug-more' ),
 				)
 			);
 		}
@@ -205,6 +217,8 @@ function wp_presence_debugger_admin_bar_assets() {
 		#wp-admin-bar-presence-debug .presence-debug-table .dashicons { font: 16px/1 dashicons; margin-inline-start: 4px; vertical-align: text-bottom; }
 		#wp-admin-bar-presence-debug code { padding: 0; background: none; color: inherit; font-size: 12px; }
 		#wp-admin-bar-presence-debug .presence-debug-room > .ab-item { font-weight: 600; cursor: default; }
+		#wp-admin-bar-presence-debug .presence-debug-more > .ab-item { opacity: .8; cursor: default; }
+		.admin-color-light #wp-admin-bar-presence-debug .presence-debug-more > .ab-item { opacity: 1; color: #646970; }
 		@media (prefers-reduced-motion: reduce) { #wp-admin-bar-presence-debug.is-beating .ab-icon { animation: none; } }
 	';
 
