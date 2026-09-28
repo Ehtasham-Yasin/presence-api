@@ -481,7 +481,6 @@ function wp_presence_scene_start( $name ) {
 		$run['cast'][] = $user_id;
 	}
 
-	delete_option( 'wp_presence_scene_notes' );
 	update_option( 'wp_presence_scene', $run, false );
 
 	wp_presence_scene_direct();
@@ -650,17 +649,17 @@ function wp_presence_scene_strike( array $run ) {
 	);
 
 	delete_option( 'wp_presence_scene' );
-	update_option(
-		'wp_presence_scene_notes',
-		array(
-			'run'   => $run['run'],
-			'name'  => $run['name'],
-			'label' => $run['label'],
-			'done'  => $run['done'],
-			'notes' => $run['notes'],
-		),
-		false
+	$reports = (array) get_option( 'wp_presence_scene_reports', array() );
+	// The newest report goes last, which is the one the console prints.
+	unset( $reports[ $run['name'] ] );
+	$reports[ $run['name'] ] = array(
+		'run'   => $run['run'],
+		'name'  => $run['name'],
+		'label' => $run['label'],
+		'done'  => $run['done'],
+		'notes' => $run['notes'],
 	);
+	update_option( 'wp_presence_scene_reports', $reports, false );
 }
 
 /**
@@ -793,7 +792,11 @@ function wp_presence_scene_heartbeat_received( $response, $data ) {
 	}
 
 	$run    = wp_presence_scene_direct();
-	$report = $run ? $run : get_option( 'wp_presence_scene_notes' );
+	$report = $run;
+	if ( ! $report ) {
+		$reports = (array) get_option( 'wp_presence_scene_reports', array() );
+		$report  = $reports ? end( $reports ) : null;
+	}
 
 	if ( is_array( $report ) ) {
 		$response['presence-scene'] = array(
@@ -865,13 +868,8 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 		return;
 	}
 
-	$run    = get_option( 'wp_presence_scene' );
-	$report = is_array( $run ) ? null : get_option( 'wp_presence_scene_notes' );
-	$active = is_array( $run ) ? $run['name'] : ( $report['name'] ?? '' );
-	// The running or last run scene leads, so it stays in reach however many scenes there are.
-	if ( isset( $scenes[ $active ] ) ) {
-		$scenes = array( $active => $scenes[ $active ] ) + $scenes;
-	}
+	$run     = get_option( 'wp_presence_scene' );
+	$reports = (array) get_option( 'wp_presence_scene_reports', array() );
 	// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Only compared against scene slugs.
 	$open  = isset( $_COOKIE['wp_presence_scene_open'] ) ? wp_unslash( $_COOKIE['wp_presence_scene_open'] ) : '';
 	$marks = array(
@@ -896,7 +894,7 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 			'href'   => '#',
 			'meta'   => array(
 				'class' => 'presence-debug-scenes-heading',
-				'html'  => ( is_array( $run ) ? '<a class="presence-debug-scene-button is-follow" href="#" role="button" aria-pressed="' . ( empty( $_COOKIE['wp_presence_scene_follow'] ) ? 'false' : 'true' ) . '" title="' . esc_attr__( 'Follow along', 'presence-api' ) . '"><span class="screen-reader-text">' . esc_html__( 'Follow along', 'presence-api' ) . '</span></a>' : '' ) . '<span class="presence-debug-scene-icon" aria-hidden="true"></span>',
+				'html'  => ( is_array( $run ) ? '<a class="presence-debug-scene-button is-follow" href="#" role="button" aria-pressed="' . ( empty( $_COOKIE['wp_presence_scene_follow'] ) ? 'false' : 'true' ) . '" title="' . esc_attr__( 'Follow along', 'presence-api' ) . '"><span class="screen-reader-text">' . esc_html__( 'Follow along', 'presence-api' ) . '</span></a>' : '<span class="presence-debug-scene-button" aria-hidden="true"></span>' ) . '<span class="presence-debug-scene-icon" aria-hidden="true"></span>',
 			),
 		)
 	);
@@ -906,7 +904,7 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 		$running  = is_array( $run ) && $run['name'] === $name;
 		$paused   = $running && ! empty( $run['paused'] );
 		$scene    = $running ? $run['scene'] : $scene;
-		$result   = $running ? $run : ( is_array( $report ) && ( $report['name'] ?? '' ) === $name ? $report : null );
+		$result   = $running ? $run : ( $reports[ $name ] ?? null );
 		$shown    = $slug === $open;
 		$value    = '';
 		$problems = array();
