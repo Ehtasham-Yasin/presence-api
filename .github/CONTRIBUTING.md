@@ -9,6 +9,10 @@ npx wp-env start
 
 Dashboard: [localhost:8888/wp-admin/](http://localhost:8888/wp-admin/) (admin / password)
 
+### Debugging
+
+With `WP_DEBUG` on, which wp-env sets, administrators get a heart in the toolbar that counts down to the next Heartbeat and beats when the server answers. Its menu lists every client in the rooms you are in, including the plugin's own bookkeeping rows. Click the heart to keep the menu open, and use the database icon beside a room to see its raw rows. Release zips leave these tools out.
+
 ## Running tests
 
 ```bash
