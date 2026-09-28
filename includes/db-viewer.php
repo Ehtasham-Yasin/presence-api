@@ -137,6 +137,17 @@ add_action(
 	}
 	tick();
 	setInterval(tick, 1000);
+	// Refreshes itself, since the tab that opened it may have moved on.
+	setInterval(function(){
+		fetch(location.href, { cache: 'no-store' }).then(function(response){
+			return response.ok ? response.text() : Promise.reject();
+		}).then(function(html){
+			var next = new DOMParser().parseFromString(html, 'text/html');
+			next.querySelectorAll('script').forEach(function(script){ script.remove(); });
+			document.body.replaceChildren.apply(document.body, Array.from(next.body.childNodes));
+			tick();
+		}).catch(function(){});
+	}, 5000);
 })();
 </script>
 </body>

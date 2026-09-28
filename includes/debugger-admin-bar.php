@@ -254,7 +254,6 @@ function wp_presence_debugger_admin_bar_assets() {
 			const lang = document.documentElement.lang || undefined;
 			const seconds = new Intl.NumberFormat( lang, { style: "unit", unit: "second", unitDisplay: "narrow" } );
 			let lastSend = Date.now();
-			let table = null;
 
 			function render() {
 				// Core waits 120 seconds between beats while the window is in the background or the user is idle.
@@ -284,10 +283,6 @@ function wp_presence_debugger_admin_bar_assets() {
 
 			// The heart beats when the server answers, so a failed request leaves it still.
 			$( document ).on( "heartbeat-tick", function () {
-				// The viewer has no Heartbeat of its own, so each beat here refreshes it.
-				if ( table && ! table.closed ) {
-					table.location.reload();
-				}
 				node.classList.remove( "is-beating" );
 				void node.offsetWidth;
 				node.classList.add( "is-beating" );
@@ -357,8 +352,7 @@ function wp_presence_debugger_admin_bar_assets() {
 
 			// Delegated, since each beat swaps the menu.
 			$( node ).on( "click", ".presence-debug-table > a", function ( event ) {
-				table = window.open( this.href, "presence-db", "popup,width=960,height=640" );
-				if ( table ) {
+				if ( window.open( this.href, "presence-db", "popup,width=960,height=640" ) ) {
 					event.preventDefault();
 				}
 			} );
