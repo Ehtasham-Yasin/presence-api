@@ -117,9 +117,7 @@
 							"const": "visit"
 						},
 						"place": {
-							"description": "dashboard, posts, pages, media, comments or profile, plus any place a plugin adds with the wp_presence_scene_places filter.",
-							"type": "string",
-							"pattern": "^[a-z0-9-]+$"
+							"enum": [ "dashboard", "posts", "pages", "media", "comments", "profile" ]
 						}
 					},
 					"required": [

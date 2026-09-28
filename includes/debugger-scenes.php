@@ -17,30 +17,13 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @return array[] Places keyed by the name a scene uses.
  */
 function wp_presence_scene_places() {
-	$places = array(
+	return array(
 		'dashboard' => array( 'dashboard', __( 'Dashboard', 'presence-api' ), 'read' ),
 		'posts'     => array( 'edit-post', __( 'Posts', 'presence-api' ), 'edit_posts' ),
 		'pages'     => array( 'edit-page', __( 'Pages', 'presence-api' ), 'edit_pages' ),
 		'media'     => array( 'upload', __( 'Media', 'presence-api' ), 'upload_files' ),
 		'comments'  => array( 'edit-comments', __( 'Comments', 'presence-api' ), 'edit_posts' ),
 		'profile'   => array( 'profile', __( 'Profile', 'presence-api' ), 'read' ),
-	);
-
-	/**
-	 * Filters the places a scene can send an actor, so plugins can add their own screens.
-	 *
-	 * @since 0.12.0
-	 *
-	 * @param array[] $places Each a screen ID, a title and the capability it needs, keyed by the name scenes use.
-	 */
-	$places = apply_filters( 'wp_presence_scene_places', $places );
-
-	return array_filter(
-		is_array( $places ) ? $places : array(),
-		function ( $place, $name ) {
-			return is_string( $name ) && preg_match( '/^[a-z0-9-]+$/', $name ) && is_array( $place ) && 3 === count( $place ) && array_filter( $place, 'is_string' ) === $place;
-		},
-		ARRAY_FILTER_USE_BOTH
 	);
 }
 
@@ -463,6 +446,8 @@ function wp_presence_scene_start( $name ) {
 	$run = array(
 		'name'    => $name,
 		'label'   => $scene['label'],
+		// A copy, so a scene edited or updated mid-run cannot change the steps being played.
+		'scene'   => $scene,
 		'run'     => $number,
 		'started' => time(),
 		'expires' => time() + wp_presence_scene_lifetime( $scene ),
@@ -528,16 +513,7 @@ function wp_presence_scene_direct() {
 
 	require_once ABSPATH . 'wp-admin/includes/post.php';
 
-	$scenes = wp_get_presence_scenes();
-
-	if ( ! isset( $scenes[ $run['name'] ] ) ) {
-		wp_presence_scene_note( $run, 'fail', __( 'The scene is no longer registered.', 'presence-api' ) );
-		wp_presence_scene_strike( $run );
-		delete_option( 'wp_presence_scene_lock' );
-		return null;
-	}
-
-	$scene   = $scenes[ $run['name'] ];
+	$scene   = $run['scene'];
 	$elapsed = time() - $run['started'];
 	$cast    = array();
 	foreach ( $run['cast'] as $user_id ) {
@@ -640,10 +616,6 @@ function wp_presence_scene_strike( array $run ) {
 	}
 
 	foreach ( $run['cast'] as $user_id ) {
-		if ( get_userdata( $user_id ) ) {
-			/* translators: %d: User ID. */
-			wp_presence_scene_note( $run, 'fail', sprintf( __( 'User %d is still there after cleanup.', 'presence-api' ), $user_id ) );
-		}
 		if ( wp_presence_has_table() ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$left = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->presence} WHERE user_id = %d", $user_id ) );
@@ -651,13 +623,6 @@ function wp_presence_scene_strike( array $run ) {
 				/* translators: 1: Number of rows, 2: User ID. */
 				wp_presence_scene_note( $run, 'fail', sprintf( _n( '%1$s presence row is left for user %2$d.', '%1$s presence rows are left for user %2$d.', $left, 'presence-api' ), number_format_i18n( $left ), $user_id ) );
 			}
-		}
-	}
-
-	foreach ( $run['posts'] as $post_id ) {
-		if ( get_post( $post_id ) ) {
-			/* translators: %d: Post ID. */
-			wp_presence_scene_note( $run, 'fail', sprintf( __( 'Post %d is still there after cleanup.', 'presence-api' ), $post_id ) );
 		}
 	}
 
@@ -823,6 +788,13 @@ function wp_presence_scene_heartbeat_received( $response, $data ) {
 			'running' => null !== $run,
 			'notes'   => $report['notes'],
 		);
+
+		if ( $run && $run['done'] && ! empty( $_COOKIE['wp_presence_scene_follow'] ) ) {
+			// Lists rather than editors, since opening a scene post would take its lock.
+			$cue = $run['scene']['cues'][ max( array_keys( $run['done'] ) ) ];
+
+			$response['presence-scene']['watch'] = isset( $cue['post'] ) || 'write' === $cue['action'] ? admin_url( 'edit.php' ) : admin_url();
+		}
 	}
 
 	return $response;
@@ -842,7 +814,7 @@ function wp_presence_scene_actor_name( $i ) {
 }
 
 /**
- * Lists the users a scene creates, such as "Cast: Actor 1 and Actor 2 as Editor".
+ * Lists the users a scene creates, such as "Actor 1 and Actor 2 as Editor".
  *
  * @since 0.12.0
  *
@@ -862,8 +834,7 @@ function wp_presence_scene_casting( array $scene ) {
 		$parts[] = sprintf( __( '%1$s as %2$s', 'presence-api' ), wp_sprintf( '%l', $people ), translate_user_role( $role_names[ $role ] ?? $role ) );
 	}
 
-	/* translators: %s: Actors and their roles. */
-	return sprintf( __( 'Cast: %s', 'presence-api' ), implode( ', ', $parts ) );
+	return implode( ', ', $parts );
 }
 
 /**
@@ -882,8 +853,13 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 
 	$run    = get_option( 'wp_presence_scene' );
 	$report = is_array( $run ) ? null : get_option( 'wp_presence_scene_notes' );
+	$active = is_array( $run ) ? $run['name'] : ( $report['name'] ?? '' );
+	// The running or last run scene leads, so it stays in reach however many scenes there are.
+	if ( isset( $scenes[ $active ] ) ) {
+		$scenes = array( $active => $scenes[ $active ] ) + $scenes;
+	}
 	// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Only compared against scene slugs.
-	$open  = isset( $_COOKIE['wp_presence_scene_open'] ) ? explode( ',', wp_unslash( $_COOKIE['wp_presence_scene_open'] ) ) : array();
+	$open  = isset( $_COOKIE['wp_presence_scene_open'] ) ? wp_unslash( $_COOKIE['wp_presence_scene_open'] ) : '';
 	$marks = array(
 		'pending' => __( 'Not played yet:', 'presence-api' ),
 		'pass'    => __( 'Passed:', 'presence-api' ),
@@ -907,11 +883,13 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 	);
 
 	foreach ( $scenes as $name => $scene ) {
-		$slug     = str_replace( '/', '-', $name );
-		$running  = is_array( $run ) && $run['name'] === $name;
-		$result   = $running ? $run : ( is_array( $report ) && ( $report['name'] ?? '' ) === $name ? $report : null );
-		$shown    = $running || $result || in_array( $slug, $open, true );
-		$value    = '';
+		$slug    = str_replace( '/', '-', $name );
+		$running = is_array( $run ) && $run['name'] === $name;
+		$scene   = $running ? $run['scene'] : $scene;
+		$result  = $running ? $run : ( is_array( $report ) && ( $report['name'] ?? '' ) === $name ? $report : null );
+		$shown   = $slug === $open;
+		/* translators: %s: Scene length in seconds. */
+		$value    = sprintf( __( '%ss', 'presence-api' ), number_format_i18n( $scene['duration'] ) );
 		$problems = array();
 
 		if ( $running ) {
@@ -935,8 +913,7 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 			array(
 				'parent' => 'presence-debug-scenes',
 				'id'     => 'presence-debug-scene-' . $slug,
-				'title'  => '<span class="presence-debug-scene-icon" aria-hidden="true"></span><span>' . esc_html( $scene['label'] ) . '</span>'
-					. ( '' !== $value ? '<span class="presence-debug-value">' . esc_html( $value ) . '</span>' : '' ),
+				'title'  => '<span class="presence-debug-scene-icon" aria-hidden="true"></span><span>' . esc_html( $scene['label'] ) . '</span><span class="presence-debug-value">' . ( $running ? '<span class="presence-debug-scene-busy" aria-hidden="true"></span>' : '' ) . esc_html( $value ) . '</span>',
 				'href'   => '#',
 				'meta'   => array( 'class' => 'presence-debug-scene' . ( $shown ? ' is-open' : '' ) ),
 			)
@@ -944,7 +921,8 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 
 		$steps = array(
 			array(
-				'label' => wp_presence_scene_casting( $scene ),
+				/* translators: %s: Actors and their roles. */
+				'label' => sprintf( __( 'Cast: %s', 'presence-api' ), wp_presence_scene_casting( $scene ) ),
 				'after' => null,
 				'class' => ' presence-debug-cast',
 				'state' => $result ? 'pass' : 'pending',
@@ -986,19 +964,10 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 
 		/* translators: %s: Scene label. */
 		$plan = sprintf( __( 'Run "%s"?', 'presence-api' ), $scene['label'] ) . "\n\n"
-			. wp_presence_scene_casting( $scene ) . ".\n\n"
-			. sprintf(
-				/* translators: 1: Number of users, 2: Scene length in seconds, 3: Minutes until a stranded scene is deleted. */
-				_n(
-					'Creates %1$s user and the posts they write, then deletes them when the scene finishes in %2$s seconds. If this tab closes first, they are deleted on the first admin page load after %3$s minutes.',
-					'Creates %1$s users and the posts they write, then deletes them when the scene finishes in %2$s seconds. If this tab closes first, they are deleted on the first admin page load after %3$s minutes.',
-					count( $scene['cast'] ),
-					'presence-api'
-				),
-				number_format_i18n( count( $scene['cast'] ) ),
-				number_format_i18n( $scene['duration'] ),
-				number_format_i18n( ceil( wp_presence_scene_lifetime( $scene ) / MINUTE_IN_SECONDS ) )
-			);
+			/* translators: 1: Number of users, 2: Actors and their roles. */
+			. sprintf( _n( 'Creates %1$s user: %2$s.', 'Creates %1$s users: %2$s.', count( $scene['cast'] ), 'presence-api' ), number_format_i18n( count( $scene['cast'] ) ), wp_presence_scene_casting( $scene ) ) . "\n\n"
+			/* translators: 1: Scene length in seconds, 2: Minutes until a stranded scene is deleted. */
+			. sprintf( __( 'Deletes them and their posts after %1$s seconds, or after %2$s minutes if this tab closes.', 'presence-api' ), number_format_i18n( $scene['duration'] ), number_format_i18n( ceil( wp_presence_scene_lifetime( $scene ) / MINUTE_IN_SECONDS ) ) );
 
 		if ( is_array( $run ) && ! $running ) {
 			$wp_admin_bar->add_node(
@@ -1029,6 +998,18 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 						'wp_presence_scene'
 					),
 					'meta'   => array( 'class' => 'presence-debug-scene-' . ( $running ? 'cut' : 'start' ) . ' ' . $hidden ),
+				)
+			);
+		}
+
+		if ( $running ) {
+			$wp_admin_bar->add_node(
+				array(
+					'parent' => 'presence-debug-scenes',
+					'id'     => 'presence-debug-scene-' . $slug . '-follow',
+					'title'  => '<span class="presence-debug-scene-icon" aria-hidden="true"></span><span>' . esc_html( empty( $_COOKIE['wp_presence_scene_follow'] ) ? __( 'Follow along', 'presence-api' ) : __( 'Stop following', 'presence-api' ) ) . '</span>',
+					'href'   => '#',
+					'meta'   => array( 'class' => 'presence-debug-scene-follow ' . $hidden ),
 				)
 			);
 		}
@@ -1068,7 +1049,8 @@ function wp_presence_scene_assets() {
 
 	wp_add_inline_style(
 		'presence-debugger-admin-bar',
-		'#wpadminbar #wp-admin-bar-presence-debug-scenes { padding-block: 6px; }
+		'#wpadminbar #wp-admin-bar-presence-debug > .ab-sub-wrapper { color-scheme: dark; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes { padding-block: 6px; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .is-hidden { display: none; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scenes-heading > .ab-item { font-weight: 600; cursor: default; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-icon::before, #wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-step-mark::before { display: block; width: 16px; margin-inline-end: 8px; font: 16px/1 dashicons; }
@@ -1078,7 +1060,11 @@ function wp_presence_scene_assets() {
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-clear .presence-debug-scene-icon::before { content: "\\f335"; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-cut .presence-debug-scene-icon::before { content: ""; width: 10px; height: 10px; margin-inline: 3px 11px; background: currentColor; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-wait .presence-debug-scene-icon::before { content: "\\f469"; }
-		#wpadminbar #wp-admin-bar-presence-debug-scenes :is(.presence-debug-step, .presence-debug-scene-wait, .presence-debug-scene-start, .presence-debug-scene-cut, .presence-debug-scene-clear) > .ab-item { padding-inline-start: 34px; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-busy::before { content: "\\f463"; display: inline-block; margin-inline-end: 6px; font: 16px/1 dashicons; vertical-align: text-bottom; animation: presence-debug-spin 2s infinite linear; }
+		@keyframes presence-debug-spin { to { transform: rotate(360deg); } }
+		@media (prefers-reduced-motion: reduce) { #wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-busy::before { animation: none; } }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-follow .presence-debug-scene-icon::before { content: "\\f177"; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes :is(.presence-debug-step, .presence-debug-scene-follow, .presence-debug-scene-wait, .presence-debug-scene-start, .presence-debug-scene-cut, .presence-debug-scene-clear) > .ab-item { padding-inline-start: 34px; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-step > .ab-item { min-height: 22px; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-step > .ab-item, #wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-step > .ab-item * { white-space: nowrap; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-cast > .ab-item > span:last-child { max-width: 360px; white-space: normal; line-height: 1.5; }
@@ -1102,31 +1088,38 @@ function wp_presence_scene_assets() {
 	const methods = { fail: "error", warning: "warn" };
 	const prefix = "wp-admin-bar-presence-debug-scene-";
 
-	// A cookie, so the server renders the open scenes on the next beat's swap.
+	// One scene opens at a time, and a cookie keeps it open through the next beat's swap.
 	$( document ).on( "click", "#wp-admin-bar-presence-debug-scenes .presence-debug-scene > a", function ( event ) {
 		event.preventDefault();
 		const scene = this.parentNode;
 		const slug = scene.id.slice( prefix.length );
-		if ( scene.parentNode.querySelector( ".presence-debug-for-" + slug + ":is(.presence-debug-scene-cut, .presence-debug-scene-clear)" ) ) {
-			return;
-		}
-		const open = scene.classList.toggle( "is-open" );
-		scene.parentNode.querySelectorAll( ".presence-debug-for-" + slug ).forEach( function ( row ) {
-			row.classList.toggle( "is-hidden", ! open );
+		const open = ! scene.classList.contains( "is-open" );
+		document.cookie = "wp_presence_scene_open=" + ( open ? encodeURIComponent( slug ) : "" ) + "; path=/; SameSite=Lax";
+		scene.parentNode.querySelectorAll( ".presence-debug-scene" ).forEach( function ( other ) {
+			const otherSlug = other.id.slice( prefix.length );
+			const shown = open && other === scene;
+			other.classList.toggle( "is-open", shown );
+			scene.parentNode.querySelectorAll( ".presence-debug-for-" + otherSlug ).forEach( function ( row ) {
+				row.classList.toggle( "is-hidden", ! shown );
+			} );
 		} );
-		const slugs = Array.from( document.querySelectorAll( "#wp-admin-bar-presence-debug-scenes .presence-debug-scene.is-open" ), function ( other ) {
-			return other.id.slice( prefix.length );
-		} ).filter( function ( other ) {
-			return ! scene.parentNode.querySelector( ".presence-debug-for-" + other + ":is(.presence-debug-scene-cut, .presence-debug-scene-clear)" );
-		} );
-		document.cookie = "wp_presence_scene_open=" + encodeURIComponent( slugs.join( "," ) ) + "; path=/; SameSite=Lax";
 	} );
 
 	$( document ).on( "click", "#wp-admin-bar-presence-debug-scenes .presence-debug-scene-start > a", function ( event ) {
 		const plan = this.querySelector( ".presence-debug-scene-plan" );
 		if ( ! window.confirm( plan.textContent ) ) {
 			event.preventDefault();
+			return;
 		}
+		document.cookie = "wp_presence_scene_open=" + encodeURIComponent( this.parentNode.id.slice( prefix.length ).replace( /-action$/, "" ) ) + "; path=/; SameSite=Lax";
+	} );
+
+	$( document ).on( "click", "#wp-admin-bar-presence-debug-scenes .presence-debug-scene-follow > a", function ( event ) {
+		event.preventDefault();
+		const follow = ! /(?:^|; )wp_presence_scene_follow=1/.test( document.cookie );
+		document.cookie = "wp_presence_scene_follow=" + ( follow ? "1" : "" ) + "; path=/; SameSite=Lax";
+		// The next beat's swap renders the new label.
+		wp.heartbeat.connectNow();
 	} );
 
 	$( document ).on( "heartbeat-send", function ( event, data ) {
@@ -1150,6 +1143,9 @@ function wp_presence_scene_assets() {
 		try {
 			window.sessionStorage.setItem( "presence-scene-printed", scene.run + ":" + scene.notes.length );
 		} catch ( e ) {}
+		if ( scene.watch && new URL( scene.watch ).pathname !== window.location.pathname ) {
+			window.location.assign( scene.watch );
+		}
 		// After the idle backoff, which would otherwise widen the interval between cues.
 		if ( scene.running ) {
 			window.setTimeout( function () {
