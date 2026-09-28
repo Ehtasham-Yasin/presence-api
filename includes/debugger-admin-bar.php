@@ -211,6 +211,7 @@ function wp_presence_debugger_admin_bar_assets() {
 		#wp-admin-bar-presence-debug.is-beating .ab-icon { animation: presence-debug-heart 2s cubic-bezier(0.22, 0.61, 0.36, 1); }
 		@keyframes presence-debug-heart { 0% { transform: scale(1); } 5% { transform: scale(1.45); } 14% { transform: scale(0.92); } 22% { transform: scale(1.3); } 32% { transform: scale(0.97); } 42%, 100% { transform: scale(1); } }
 		#wp-admin-bar-presence-debug .ab-sub-wrapper { max-height: calc(100vh - 64px); overflow-y: auto; }
+		#wpadminbar #wp-admin-bar-presence-debug.is-pinned > .ab-sub-wrapper { display: block; }
 		#wp-admin-bar-presence-debug .presence-debug-row > .ab-item { display: flex !important; gap: 16px; cursor: default; }
 		#wp-admin-bar-presence-debug .presence-debug-value { margin-inline-start: auto; font-variant-numeric: tabular-nums; opacity: .8; }
 		.admin-color-light #wp-admin-bar-presence-debug .presence-debug-value { opacity: 1; color: #646970; }
@@ -293,6 +294,48 @@ function wp_presence_debugger_admin_bar_assets() {
 			render();
 			setInterval( render, 1000 );
 
+			// A pinned menu stays open, so it slides aside for any other menu that opens over it.
+			function reposition() {
+				const menu = node.querySelector( ".ab-sub-wrapper" );
+				if ( ! menu ) {
+					return;
+				}
+				menu.style.right = "";
+				if ( ! node.classList.contains( "is-pinned" ) ) {
+					return;
+				}
+				const open = document.querySelector( "#wpadminbar li.menupop.hover:not(#wp-admin-bar-presence-debug) > .ab-sub-wrapper" );
+				if ( ! open ) {
+					return;
+				}
+				const mine = menu.getBoundingClientRect();
+				const theirs = open.getBoundingClientRect();
+				if ( mine.right > theirs.left && mine.left < theirs.right ) {
+					menu.style.right = ( mine.right - theirs.left + 8 ) + "px";
+				}
+			}
+			new MutationObserver( function () {
+				window.requestAnimationFrame( reposition );
+			} ).observe( document.getElementById( "wpadminbar" ), { attributes: true, attributeFilter: [ "class" ], subtree: true } );
+
+			function pin( pinned ) {
+				node.classList.toggle( "is-pinned", pinned );
+				node.firstElementChild.setAttribute( "aria-expanded", pinned ? "true" : "false" );
+				try {
+					window.localStorage.setItem( "presence-debug-pinned", pinned ? "1" : "" );
+				} catch ( e ) {}
+			}
+			try {
+				pin( "1" === window.localStorage.getItem( "presence-debug-pinned" ) );
+			} catch ( e ) {}
+			node.firstElementChild.addEventListener( "click", function ( event ) {
+				pin( ! node.classList.contains( "is-pinned" ) );
+				// Live updates skip a focused menu, so a pinned one would stop refreshing.
+				if ( event.detail ) {
+					this.blur();
+				}
+			} );
+
 			// Delegated, since each beat swaps the menu.
 			$( node ).on( "click", ".presence-debug-table > a", function ( event ) {
 				table = window.open( this.href, "presence-db", "popup,width=960,height=640" );
@@ -317,6 +360,7 @@ function wp_presence_debugger_admin_bar_assets() {
 							if ( fresh && menu ) {
 								menu.replaceWith( fresh );
 								render();
+								reposition();
 							}
 						},
 					} );
