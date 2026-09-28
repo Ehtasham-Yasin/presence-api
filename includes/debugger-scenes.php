@@ -424,6 +424,18 @@ function wp_presence_scene_note( array &$run, $level, $message ) {
 }
 
 /**
+ * Returns how long a scene's cast may exist, leaving time for a closed tab's run to be swept.
+ *
+ * @since 0.12.0
+ *
+ * @param array $scene A registered scene.
+ * @return int Seconds.
+ */
+function wp_presence_scene_lifetime( array $scene ) {
+	return $scene['duration'] + 10 * MINUTE_IN_SECONDS;
+}
+
+/**
  * Casts a scene and plays its opening cues.
  *
  * @since 0.12.0
@@ -453,7 +465,7 @@ function wp_presence_scene_start( $name ) {
 		'label'   => $scene['label'],
 		'run'     => $number,
 		'started' => time(),
-		'expires' => time() + $scene['duration'] + 10 * MINUTE_IN_SECONDS,
+		'expires' => time() + wp_presence_scene_lifetime( $scene ),
 		'cast'    => array(),
 		'posts'   => array(),
 		'done'    => array(),
@@ -974,8 +986,19 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 
 		/* translators: %s: Scene label. */
 		$plan = sprintf( __( 'Run "%s"?', 'presence-api' ), $scene['label'] ) . "\n\n"
-			/* translators: 1: Who is cast, 2: Duration in seconds. */
-			. sprintf( __( '%1$s. Runs for %2$ss.', 'presence-api' ), wp_presence_scene_casting( $scene ), $scene['duration'] );
+			. wp_presence_scene_casting( $scene ) . ".\n\n"
+			. sprintf(
+				/* translators: 1: Number of users, 2: Scene length in seconds, 3: Minutes until a stranded scene is deleted. */
+				_n(
+					'Creates %1$s user and the posts they write, then deletes them when the scene finishes in %2$s seconds. If this tab closes first, they are deleted on the first admin page load after %3$s minutes.',
+					'Creates %1$s users and the posts they write, then deletes them when the scene finishes in %2$s seconds. If this tab closes first, they are deleted on the first admin page load after %3$s minutes.',
+					count( $scene['cast'] ),
+					'presence-api'
+				),
+				number_format_i18n( count( $scene['cast'] ) ),
+				number_format_i18n( $scene['duration'] ),
+				number_format_i18n( ceil( wp_presence_scene_lifetime( $scene ) / MINUTE_IN_SECONDS ) )
+			);
 
 		if ( is_array( $run ) && ! $running ) {
 			$wp_admin_bar->add_node(
