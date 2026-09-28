@@ -620,15 +620,10 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 			);
 		}
 
-		$plan = $scene['label'] . "\n\n" . implode(
-			"\n",
-			array_map(
-				function ( $step ) {
-					return ( null !== $step['after'] ? $step['after'] . 's  ' : '' ) . $step['label'];
-				},
-				$steps
-			)
-		) . "\n\n" . __( 'Start this scene?', 'presence-api' );
+		/* translators: %s: Scene label. */
+		$plan = sprintf( __( 'Start "%s"?', 'presence-api' ), $scene['label'] ) . "\n\n"
+			/* translators: 1: Who the scene creates, such as "Create Alice (Author)", 2: Duration in seconds. */
+			. sprintf( __( '%1$s for %2$ss, then delete them and their posts.', 'presence-api' ), wp_presence_scene_cast_summary( $scene ), $scene['duration'] );
 
 		$wp_admin_bar->add_node(
 			array(
