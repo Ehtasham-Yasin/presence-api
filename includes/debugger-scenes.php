@@ -922,10 +922,10 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 					return 'fail' === $note['level'] || 'warning' === $note['level'];
 				}
 			);
-			$value    = $problems
+			if ( $problems ) {
 				/* translators: %s: Number of problems. */
-				? '<span class="presence-debug-scene-result is-fail" aria-hidden="true"></span>' . esc_html( number_format_i18n( count( $problems ) ) ) . '<span class="screen-reader-text">' . esc_html( sprintf( _n( '%s problem', '%s problems', count( $problems ), 'presence-api' ), number_format_i18n( count( $problems ) ) ) ) . '</span>'
-				: '<span class="presence-debug-scene-result is-pass" aria-hidden="true"></span><span class="screen-reader-text">' . esc_html__( 'Finished with no problems', 'presence-api' ) . '</span>';
+				$value = '<span class="presence-debug-scene-result" aria-hidden="true"></span>' . esc_html( number_format_i18n( count( $problems ) ) ) . '<span class="screen-reader-text">' . esc_html( sprintf( _n( '%s problem', '%s problems', count( $problems ), 'presence-api' ), number_format_i18n( count( $problems ) ) ) ) . '</span>';
+			}
 		}
 
 		/* translators: %s: Scene label. */
@@ -1039,9 +1039,7 @@ function wp_presence_scene_assets() {
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-button.is-follow[aria-pressed="true"]::before { content: "\\f177"; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-button.is-stop::before { content: ""; width: 10px; height: 10px; background: currentColor; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-busy::before { content: "\\f463"; display: inline-block; margin-inline-end: 6px; font: 16px/1 dashicons; vertical-align: text-bottom; animation: presence-debug-spin 2s infinite linear; }
-		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-result::before { display: inline-block; margin-inline-end: 4px; font: 16px/1 dashicons; vertical-align: text-bottom; }
-		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-result.is-pass::before { content: "\\f147"; margin-inline-end: 0; }
-		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-result.is-fail::before { content: "\\f534"; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-result::before { content: "\\f534"; display: inline-block; margin-inline-end: 4px; font: 16px/1 dashicons; vertical-align: text-bottom; }
 		@keyframes presence-debug-spin { to { transform: rotate(360deg); } }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .is-current .presence-debug-step-mark::before { content: "\\f463"; animation: presence-debug-spin 2s infinite linear; }
 		@media (prefers-reduced-motion: reduce) { #wpadminbar #wp-admin-bar-presence-debug-scenes :is(.presence-debug-scene-busy, .is-current .presence-debug-step-mark)::before { animation: none; } }
