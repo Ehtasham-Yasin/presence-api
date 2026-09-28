@@ -205,7 +205,6 @@ function wp_presence_debugger_admin_bar_assets() {
 		#wpadminbar #wp-admin-bar-presence-debug .ab-icon::before { content: "\\f487"; top: 2px; }
 		#wpadminbar #wp-admin-bar-presence-debug.is-pinned > .ab-item { color: var(--presence-debug-open-color); background: var(--presence-debug-open-background); }
 		#wpadminbar #wp-admin-bar-presence-debug.is-pinned .ab-icon::before { color: inherit; }
-		#wpadminbar #wp-admin-bar-presence-debug.is-beating .ab-icon::before { color: #d63638; }
 		#wpadminbar #wp-admin-bar-presence-debug.is-lost .ab-icon::before { color: #dba617; }
 		#wpadminbar #wp-admin-bar-presence-debug.is-pinned > .ab-item::after { content: "\\f537"; font: 16px/32px dashicons; margin-inline-start: 6px; vertical-align: top; }
 		.admin-color-light #wpadminbar #wp-admin-bar-presence-debug.is-lost .ab-icon::before { color: #996800; }
@@ -218,13 +217,11 @@ function wp_presence_debugger_admin_bar_assets() {
 		#wpadminbar #wp-admin-bar-presence-debug .ab-submenu .ab-item { display: flex; align-items: center; min-height: 26px; }
 		#wpadminbar #wp-admin-bar-presence-debug .ab-submenu .ab-item, #wpadminbar #wp-admin-bar-presence-debug .ab-submenu .ab-item > * { line-height: 1.4; }
 		#wp-admin-bar-presence-debug .presence-debug-row > .ab-item { gap: 16px; cursor: default; }
-		#wp-admin-bar-presence-debug .presence-debug-value { margin-inline-start: auto; font-variant-numeric: tabular-nums; opacity: .8; }
-		.admin-color-light #wp-admin-bar-presence-debug .presence-debug-value { opacity: 1; color: #646970; }
+		#wp-admin-bar-presence-debug .presence-debug-value { margin-inline-start: auto; font-variant-numeric: tabular-nums; }
 		#wp-admin-bar-presence-debug .presence-debug-table .dashicons { font: 16px/1 dashicons; margin-inline-start: 4px; vertical-align: text-bottom; }
 		#wp-admin-bar-presence-debug code { padding: 0; background: none; color: inherit; font-size: 12px; line-height: inherit; }
 		#wp-admin-bar-presence-debug .presence-debug-room > .ab-item { font-weight: 600; cursor: default; }
-		#wp-admin-bar-presence-debug .presence-debug-more > .ab-item { opacity: .8; cursor: default; }
-		.admin-color-light #wp-admin-bar-presence-debug .presence-debug-more > .ab-item { opacity: 1; color: #646970; }
+		#wp-admin-bar-presence-debug .presence-debug-more > .ab-item { cursor: default; }
 		@media (prefers-reduced-motion: reduce) { #wp-admin-bar-presence-debug.is-beating .ab-icon { animation: none; } }
 	';
 
