@@ -1,0 +1,25 @@
+{
+	"$schema": "../schemas/scene.json",
+	"apiVersion": 1,
+	"name": "presence-api/editing-together",
+	"title": "Editing together",
+	"cast": [ { "role": "author" }, { "role": "editor" } ],
+	"cues": [
+		{ "at": 0, "actor": 1, "action": "visit", "place": "posts" },
+		{ "at": 4, "actor": 1, "action": "write", "title": "Launch checklist" },
+		{ "at": 12, "actor": 1, "action": "type", "post": 1, "text": "First pass at the checklist." },
+		{ "at": 18, "actor": 2, "action": "visit", "place": "posts" },
+		{ "at": 22, "actor": 2, "action": "open", "post": 1 },
+		{ "at": 24, "actor": 2, "action": "checkLocked", "post": 1 },
+		{ "at": 32, "actor": 1, "action": "type", "post": 1, "text": "Added the venue details." },
+		{ "at": 40, "actor": 1, "action": "close", "post": 1 },
+		{ "at": 44, "actor": 2, "action": "checkUnlocked", "post": 1 },
+		{ "at": 46, "actor": 2, "action": "open", "post": 1 },
+		{ "at": 52, "actor": 2, "action": "type", "post": 1, "text": "Tightened the wording." },
+		{ "at": 58, "actor": 1, "action": "open", "post": 1 },
+		{ "at": 60, "actor": 1, "action": "checkLocked", "post": 1 },
+		{ "at": 66, "actor": 1, "action": "takeOver", "post": 1 },
+		{ "at": 72, "actor": 1, "action": "type", "post": 1, "text": "Final dates added." },
+		{ "at": 78, "actor": "cast", "action": "leave" }
+	]
+}
