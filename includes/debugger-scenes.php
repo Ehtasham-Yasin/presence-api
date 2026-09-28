@@ -247,7 +247,7 @@ function wp_presence_scene_direct() {
 		if ( isset( $run['done'][ $i ] ) || (int) $cue['after'] > $elapsed ) {
 			continue;
 		}
-		$run['done'][ $i ] = true;
+		$run['done'][ $i ] = 'pass';
 
 		$warnings = array();
 		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_set_error_handler -- Collects the cue's warnings for the report.
@@ -262,11 +262,15 @@ function wp_presence_scene_direct() {
 			call_user_func( $cue['callback'], $cast );
 			wp_presence_scene_note( $run, 'pass', $cue['label'] );
 		} catch ( Throwable $e ) {
+			$run['done'][ $i ] = 'fail';
 			wp_presence_scene_note( $run, 'fail', $cue['label'] . ': ' . $e->getMessage() );
 		} finally {
 			restore_error_handler();
 		}
 
+		if ( $warnings ) {
+			$run['done'][ $i ] = 'fail';
+		}
 		foreach ( $warnings as $warning ) {
 			wp_presence_scene_note( $run, 'warning', $warning );
 		}
@@ -305,6 +309,8 @@ function wp_presence_scene_strike( array $run ) {
 		require_once ABSPATH . 'wp-admin/includes/ms.php';
 	}
 
+	$before = count( $run['notes'] );
+
 	// Deleting a user only trashes their posts, so the scene's own go first.
 	foreach ( $run['posts'] as $post_id ) {
 		wp_delete_post( $post_id, true );
@@ -339,6 +345,7 @@ function wp_presence_scene_strike( array $run ) {
 		}
 	}
 
+	$cleaned  = count( $run['notes'] ) === $before;
 	$problems = count(
 		array_filter(
 			$run['notes'],
@@ -361,10 +368,12 @@ function wp_presence_scene_strike( array $run ) {
 	update_option(
 		'wp_presence_scene_notes',
 		array(
-			'run'   => $run['run'],
-			'name'  => $run['name'],
-			'label' => $run['label'],
-			'notes' => $run['notes'],
+			'run'     => $run['run'],
+			'name'    => $run['name'],
+			'label'   => $run['label'],
+			'done'    => $run['done'],
+			'cleaned' => $cleaned,
+			'notes'   => $run['notes'],
 		),
 		false
 	);
@@ -474,7 +483,33 @@ function wp_presence_scene_heartbeat_received( $response, $data ) {
 }
 
 /**
- * Adds a row per scene to the top of the debugger menu, showing its progress or last result.
+ * Describes who a scene creates, such as "Create Alice and Bob (Editor)".
+ *
+ * @since 0.12.0
+ *
+ * @param array $scene A registered scene.
+ * @return string
+ */
+function wp_presence_scene_cast_summary( array $scene ) {
+	$names = array( 'Alice', 'Bob', 'Carol', 'Dave', 'Erin' );
+	$roles = array();
+	foreach ( array_values( $scene['cast'] ) as $i => $part ) {
+		$roles[ $part['role'] ?? 'author' ][] = $names[ $i ];
+	}
+
+	$parts = array();
+	foreach ( $roles as $role => $people ) {
+		$role_names = wp_roles()->role_names;
+		/* translators: 1: Names, 2: Role. */
+		$parts[] = sprintf( __( '%1$s (%2$s)', 'presence-api' ), wp_sprintf( '%l', $people ), translate_user_role( $role_names[ $role ] ?? $role ) );
+	}
+
+	/* translators: %s: Names and roles of the users a scene creates. */
+	return sprintf( __( 'Create %s', 'presence-api' ), implode( ', ', $parts ) );
+}
+
+/**
+ * Adds each scene to the top of the debugger menu, with every step it will take before it can start.
  *
  * @since 0.12.0
  *
@@ -489,6 +524,13 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 
 	$run    = get_option( 'wp_presence_scene' );
 	$report = is_array( $run ) ? null : get_option( 'wp_presence_scene_notes' );
+	// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Only compared against scene slugs.
+	$open  = isset( $_COOKIE['wp_presence_scene_open'] ) ? wp_unslash( $_COOKIE['wp_presence_scene_open'] ) : '';
+	$marks = array(
+		'pending' => __( 'Not played yet:', 'presence-api' ),
+		'pass'    => __( 'Passed:', 'presence-api' ),
+		'fail'    => __( 'Failed:', 'presence-api' ),
+	);
 
 	$wp_admin_bar->add_group(
 		array(
@@ -498,17 +540,20 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 	);
 
 	foreach ( $scenes as $name => $scene ) {
+		$slug     = str_replace( '/', '-', $name );
 		$running  = is_array( $run ) && $run['name'] === $name;
+		$result   = $running ? $run : ( is_array( $report ) && ( $report['name'] ?? '' ) === $name ? $report : null );
+		$shown    = $running || $open === $slug;
 		$value    = '';
 		$problems = array();
 
 		if ( $running ) {
-			/* translators: 1: Cues played, 2: Total cues. */
-			$value = sprintf( __( '%1$s / %2$s', 'presence-api' ), number_format_i18n( count( $run['done'] ) ), number_format_i18n( count( $scene['cues'] ) ) );
-		} elseif ( is_array( $report ) && ( $report['name'] ?? '' ) === $name ) {
+			/* translators: 1: Steps played, 2: Total steps. */
+			$value = sprintf( __( '%1$s / %2$s', 'presence-api' ), number_format_i18n( count( $run['done'] ) + 1 ), number_format_i18n( count( $scene['cues'] ) + 2 ) );
+		} elseif ( $result ) {
 			// The last note is the curtain, which only counts the others.
 			$problems = array_filter(
-				array_slice( $report['notes'], 0, -1 ),
+				array_slice( $result['notes'], 0, -1 ),
 				function ( $note ) {
 					return 'fail' === $note['level'] || 'warning' === $note['level'];
 				}
@@ -522,11 +567,78 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 		$wp_admin_bar->add_node(
 			array(
 				'parent' => 'presence-debug-scenes',
-				'id'     => 'presence-debug-scene-' . str_replace( '/', '-', $name ),
-				'title'  => '<span class="presence-debug-scene-icon' . ( $running ? ' is-running' : '' ) . '" aria-hidden="true"></span>'
-					/* translators: %s: Scene label. */
-					. '<span><span class="screen-reader-text">' . esc_html( $running ? __( 'Cut', 'presence-api' ) : __( 'Start', 'presence-api' ) ) . ' </span>' . esc_html( $scene['label'] ) . '</span>'
+				'id'     => 'presence-debug-scene-' . $slug,
+				'title'  => '<span class="presence-debug-scene-icon" aria-hidden="true"></span><span>' . esc_html( $scene['label'] ) . '</span>'
 					. ( '' !== $value ? '<span class="presence-debug-value">' . esc_html( $value ) . '</span>' : '' ),
+				'href'   => '#',
+				'meta'   => array( 'class' => 'presence-debug-scene' . ( $shown ? ' is-open' : '' ) ),
+			)
+		);
+
+		$steps = array(
+			array(
+				'label' => wp_presence_scene_cast_summary( $scene ),
+				'after' => null,
+				'state' => $result ? 'pass' : 'pending',
+			),
+		);
+		foreach ( $scene['cues'] as $i => $cue ) {
+			$steps[] = array(
+				'label' => $cue['label'],
+				'after' => (int) $cue['after'],
+				'state' => isset( $result['done'][ $i ] ) ? ( 'fail' === $result['done'][ $i ] ? 'fail' : 'pass' ) : 'pending',
+			);
+		}
+		$steps[] = array(
+			'label' => __( 'Delete them and their posts', 'presence-api' ),
+			'after' => $scene['duration'],
+			'state' => isset( $result['cleaned'] ) && ! $running ? ( $result['cleaned'] ? 'pass' : 'fail' ) : 'pending',
+		);
+
+		$hidden = 'presence-debug-for-' . $slug . ( $shown ? '' : ' is-hidden' );
+
+		foreach ( $steps as $i => $step ) {
+			$wp_admin_bar->add_node(
+				array(
+					'parent' => 'presence-debug-scenes',
+					'id'     => 'presence-debug-scene-' . $slug . '-step-' . $i,
+					'title'  => '<span class="presence-debug-step-mark" aria-hidden="true"></span><span><span class="screen-reader-text">' . esc_html( $marks[ $step['state'] ] ) . ' </span>' . esc_html( $step['label'] ) . '</span>'
+						. ( null !== $step['after'] ? '<span class="presence-debug-value">' . esc_html( $step['after'] . 's' ) . '</span>' : '' ),
+					'meta'   => array( 'class' => 'presence-debug-step is-' . $step['state'] . ' ' . $hidden ),
+				)
+			);
+		}
+
+		foreach ( $problems as $i => $note ) {
+			$wp_admin_bar->add_node(
+				array(
+					'parent' => 'presence-debug-scenes',
+					'id'     => 'presence-debug-scene-' . $slug . '-note-' . $i,
+					'title'  => '<span>' . esc_html( $note['message'] ) . '</span><span class="presence-debug-value" data-presence-debug="note" data-presence-debug-seconds="' . esc_attr( $note['t'] ) . '"></span>',
+					'meta'   => array( 'class' => 'presence-debug-note ' . $hidden ),
+				)
+			);
+		}
+
+		$plan = $scene['label'] . "\n\n" . implode(
+			"\n",
+			array_map(
+				function ( $step ) {
+					return ( null !== $step['after'] ? $step['after'] . 's  ' : '' ) . $step['label'];
+				},
+				$steps
+			)
+		) . "\n\n" . __( 'Start this scene?', 'presence-api' );
+
+		$wp_admin_bar->add_node(
+			array(
+				'parent' => 'presence-debug-scenes',
+				'id'     => 'presence-debug-scene-' . $slug . '-action',
+				'title'  => '<span class="presence-debug-scene-icon" aria-hidden="true"></span><span>' . esc_html( $running ? __( 'Cut', 'presence-api' ) : __( 'Start', 'presence-api' ) ) . '</span>'
+					. ( $running ? '' : '<span class="presence-debug-value">'
+						/* translators: 1: Number of users, 2: Duration in seconds. */
+						. esc_html( sprintf( _n( '%1$s user, %2$ss', '%1$s users, %2$ss', count( $scene['cast'] ), 'presence-api' ), number_format_i18n( count( $scene['cast'] ) ), $scene['duration'] ) )
+						. '</span><span class="presence-debug-scene-plan" hidden>' . esc_html( $plan ) . '</span>' ),
 				'href'   => wp_nonce_url(
 					add_query_arg(
 						array(
@@ -538,25 +650,14 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 					),
 					'wp_presence_scene'
 				),
-				'meta'   => array( 'class' => 'presence-debug-scene' . ( $running ? ' is-running' : '' ) ),
+				'meta'   => array( 'class' => 'presence-debug-scene-' . ( $running ? 'cut' : 'start' ) . ' ' . $hidden ),
 			)
 		);
-
-		foreach ( $problems as $i => $note ) {
-			$wp_admin_bar->add_node(
-				array(
-					'parent' => 'presence-debug-scenes',
-					'id'     => 'presence-debug-scene-note-' . $i,
-					'title'  => '<span>' . esc_html( $note['message'] ) . '</span><span class="presence-debug-value" data-presence-debug="note" data-presence-debug-seconds="' . esc_attr( $note['t'] ) . '"></span>',
-					'meta'   => array( 'class' => 'presence-debug-note' ),
-				)
-			);
-		}
 	}
 }
 
 /**
- * Adds the scene styles and console report to the debugger's assets.
+ * Adds the scene styles, controls and console report to the debugger's assets.
  *
  * @since 0.12.0
  */
@@ -567,9 +668,19 @@ function wp_presence_scene_assets() {
 
 	wp_add_inline_style(
 		'presence-debugger-admin-bar',
-		'#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-icon::before { content: "\\f522"; display: block; width: 16px; margin-inline-end: 8px; font: 16px/1 dashicons; }
-		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-icon.is-running::before { content: ""; width: 10px; height: 10px; margin-inline: 3px 11px; background: currentColor; }
-		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-note > .ab-item { max-width: 420px; padding-inline-start: 34px; white-space: normal; }'
+		'#wpadminbar #wp-admin-bar-presence-debug-scenes .is-hidden { display: none; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-icon::before, #wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-step-mark::before { display: block; width: 16px; margin-inline-end: 8px; font: 16px/1 dashicons; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene .presence-debug-scene-icon::before { content: "\\f345"; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene.is-open .presence-debug-scene-icon::before { content: "\\f347"; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-start .presence-debug-scene-icon::before { content: "\\f522"; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-cut .presence-debug-scene-icon::before { content: ""; width: 10px; height: 10px; margin-inline: 3px 11px; background: currentColor; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-step > .ab-item, #wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-start > .ab-item, #wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-cut > .ab-item { padding-inline-start: 34px; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-step-mark::before { content: ""; box-sizing: border-box; width: 12px; height: 12px; margin-inline: 2px 10px; border: 1.5px solid currentColor; border-radius: 50%; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .is-pass .presence-debug-step-mark::before { content: "\\f147"; width: 16px; height: auto; margin-inline: 0 8px; border: 0; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .is-fail .presence-debug-step-mark::before { content: "\\f158"; width: 16px; height: auto; margin-inline: 0 8px; border: 0; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-step > .ab-item > span:nth-child(2), #wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-note > .ab-item > span:first-child { white-space: normal; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-step .presence-debug-value { padding-inline-start: 16px; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-note > .ab-item { max-width: 420px; padding-inline-start: 58px; white-space: normal; }'
 	);
 
 	wp_add_inline_script(
@@ -581,6 +692,29 @@ function wp_presence_scene_assets() {
 	}
 	const marks = { pass: "✓", fail: "✗", warning: "!", info: "•" };
 	const methods = { fail: "error", warning: "warn" };
+	const prefix = "wp-admin-bar-presence-debug-scene-";
+
+	// A cookie, so the server renders the open scene on the next beat's swap.
+	$( document ).on( "click", "#wp-admin-bar-presence-debug-scenes .presence-debug-scene > a", function ( event ) {
+		event.preventDefault();
+		const scene = this.parentNode;
+		const slug = scene.classList.contains( "is-open" ) ? "" : scene.id.slice( prefix.length );
+		document.cookie = "wp_presence_scene_open=" + encodeURIComponent( slug ) + "; path=/; SameSite=Lax";
+		document.querySelectorAll( "#wp-admin-bar-presence-debug-scenes .presence-debug-scene" ).forEach( function ( other ) {
+			const open = other.id.slice( prefix.length ) === slug || !! other.parentNode.querySelector( ".presence-debug-for-" + other.id.slice( prefix.length ) + ".presence-debug-scene-cut" );
+			other.classList.toggle( "is-open", open );
+			other.parentNode.querySelectorAll( ".presence-debug-for-" + other.id.slice( prefix.length ) ).forEach( function ( row ) {
+				row.classList.toggle( "is-hidden", ! open );
+			} );
+		} );
+	} );
+
+	$( document ).on( "click", "#wp-admin-bar-presence-debug-scenes .presence-debug-scene-start > a", function ( event ) {
+		const plan = this.querySelector( ".presence-debug-scene-plan" );
+		if ( ! window.confirm( plan.textContent ) ) {
+			event.preventDefault();
+		}
+	} );
 
 	$( document ).on( "heartbeat-send", function ( event, data ) {
 		data[ "presence-scene" ] = 1;
@@ -611,7 +745,7 @@ function wp_presence_scene_assets() {
 		}
 	} );
 
-	if ( document.querySelector( "#wp-admin-bar-presence-debug-scenes .is-running" ) ) {
+	if ( document.querySelector( "#wp-admin-bar-presence-debug-scenes .presence-debug-scene-cut" ) ) {
 		wp.heartbeat.interval( "fast" );
 		wp.heartbeat.connectNow();
 	}
@@ -634,7 +768,7 @@ function wp_presence_register_default_scenes() {
 			'cues'  => array(
 				array(
 					'after'    => 0,
-					'label'    => __( 'Alice and Bob arrive on the dashboard', 'presence-api' ),
+					'label'    => __( 'Alice and Bob arrive', 'presence-api' ),
 					'callback' => function ( $cast ) {
 						$cast[0]->enter( 'dashboard' );
 						$cast[1]->enter( 'dashboard' );
@@ -642,14 +776,14 @@ function wp_presence_register_default_scenes() {
 				),
 				array(
 					'after'    => 5,
-					'label'    => __( 'Alice opens her draft', 'presence-api' ),
+					'label'    => __( 'Alice opens a draft', 'presence-api' ),
 					'callback' => function ( $cast ) {
 						$cast[0]->open( $cast[0]->write( __( 'Quarterly budget', 'presence-api' ) ) );
 					},
 				),
 				array(
 					'after'    => 20,
-					'label'    => __( 'Bob opens the same draft and finds it locked', 'presence-api' ),
+					'label'    => __( 'Bob opens it and finds it locked', 'presence-api' ),
 					'callback' => function ( $cast ) {
 						$cast[1]->open( $cast[0]->post() );
 						wp_presence_scene_expect( $cast[1]->sees_lock( $cast[0]->post() ) === $cast[0]->ID, __( 'Bob does not see Alice holding the lock.', 'presence-api' ) );
@@ -685,16 +819,16 @@ function wp_presence_register_default_scenes() {
 	$team     = array(
 		array(
 			'after'    => 0,
-			'label'    => __( 'Alice arrives on the dashboard', 'presence-api' ),
+			'label'    => __( 'Alice arrives', 'presence-api' ),
 			'callback' => function ( $cast ) {
 				$cast[0]->enter( 'dashboard' );
 			},
 		),
 	);
 	$arrivals = array(
-		__( 'Bob arrives on the dashboard', 'presence-api' ),
-		__( 'Carol arrives on the dashboard', 'presence-api' ),
-		__( 'Dave arrives on the dashboard', 'presence-api' ),
+		__( 'Bob arrives', 'presence-api' ),
+		__( 'Carol arrives', 'presence-api' ),
+		__( 'Dave arrives', 'presence-api' ),
 	);
 	foreach ( $arrivals as $i => $label ) {
 		$team[] = array(
@@ -715,7 +849,7 @@ function wp_presence_register_default_scenes() {
 		$team[] = array(
 			'after'    => 30 + 6 * $i,
 			/* translators: 1: Actor name, 2: Post title. */
-			'label'    => sprintf( __( '%1$s opens a draft, "%2$s"', 'presence-api' ), array_keys( $titles )[ $i ], $title ),
+			'label'    => sprintf( __( '%1$s opens "%2$s"', 'presence-api' ), array_keys( $titles )[ $i ], $title ),
 			'callback' => function ( $cast ) use ( $i, $title ) {
 				$cast[ $i ]->open( $cast[ $i ]->write( $title ) );
 			},
@@ -749,7 +883,7 @@ function wp_presence_register_default_scenes() {
 			'cues'  => array(
 				array(
 					'after'    => 0,
-					'label'    => __( 'Alice arrives on the dashboard', 'presence-api' ),
+					'label'    => __( 'Alice arrives', 'presence-api' ),
 					'callback' => function ( $cast ) {
 						$cast[0]->enter( 'dashboard' );
 					},
@@ -763,14 +897,14 @@ function wp_presence_register_default_scenes() {
 				),
 				array(
 					'after'    => 25,
-					'label'    => __( 'Alice loses her connection', 'presence-api' ),
+					'label'    => __( 'Alice loses connection', 'presence-api' ),
 					'callback' => function ( $cast ) {
 						$cast[0]->drop();
 					},
 				),
 				array(
 					'after'    => $aged_out,
-					'label'    => __( 'Alice has aged out', 'presence-api' ),
+					'label'    => __( 'Alice ages out', 'presence-api' ),
 					'callback' => function ( $cast ) {
 						wp_presence_scene_expect( ! $cast[0]->is_present(), __( 'Alice is still listed online after her rows expired.', 'presence-api' ) );
 					},
