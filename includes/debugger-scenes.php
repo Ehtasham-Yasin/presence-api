@@ -1020,11 +1020,12 @@ function wp_presence_scene_assets() {
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-button { display: flex; flex: none; align-items: center; justify-content: center; width: 28px; padding: 0; color: inherit; opacity: 0; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene:is(:hover, :has(:focus-visible)) .presence-debug-scene-button, #wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-button:is(.is-resume, [aria-pressed="true"]) { opacity: 1; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-button:last-child { margin-inline-end: 6px; }
-		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-button:is(:hover, :focus, [aria-pressed="true"]) { color: var(--wp-admin-theme-color, #72aee6); }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-button:is(:hover, :focus, [aria-pressed="true"]):not([aria-pressed="false"]) { color: var(--wp-admin-theme-color, #72aee6); }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-button::before { font: 16px/1 dashicons; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-button:is(.is-start, .is-resume)::before { content: "\\f522"; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-button.is-pause::before { content: "\\f523"; }
-		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-button.is-follow::before { content: "\\f177"; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-button.is-follow::before { content: "\\f530"; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-button.is-follow[aria-pressed="true"]::before { content: "\\f177"; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-button.is-stop::before { content: ""; width: 10px; height: 10px; background: currentColor; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-busy::before { content: "\\f463"; display: inline-block; margin-inline-end: 6px; font: 16px/1 dashicons; vertical-align: text-bottom; animation: presence-debug-spin 2s infinite linear; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-result::before { display: inline-block; margin-inline-end: 4px; font: 16px/1 dashicons; vertical-align: text-bottom; }
