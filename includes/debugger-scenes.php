@@ -438,7 +438,11 @@ function wp_presence_scene_start( $name ) {
 		return false;
 	}
 
-	wp_presence_scene_sweep( true );
+	// One scene runs at a time, so a second waits until the first finishes or expires.
+	wp_presence_scene_sweep();
+	if ( get_option( 'wp_presence_scene' ) ) {
+		return false;
+	}
 
 	$scene  = $scenes[ $name ];
 	$number = (int) get_option( 'wp_presence_scene_runs', 1000 ) + 1;
@@ -973,26 +977,38 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 			/* translators: 1: Who is cast, 2: Duration in seconds. */
 			. sprintf( __( '%1$s. Runs for %2$ss.', 'presence-api' ), wp_presence_scene_casting( $scene ), $scene['duration'] );
 
-		$wp_admin_bar->add_node(
-			array(
-				'parent' => 'presence-debug-scenes',
-				'id'     => 'presence-debug-scene-' . $slug . '-action',
-				'title'  => '<span class="presence-debug-scene-icon" aria-hidden="true"></span><span>' . esc_html( $running ? __( 'Stop scene', 'presence-api' ) : ( $result ? __( 'Run again', 'presence-api' ) : __( 'Run scene', 'presence-api' ) ) ) . '</span>'
-					. ( $running ? '' : '<span class="presence-debug-scene-plan" hidden>' . esc_html( $plan ) . '</span>' ),
-				'href'   => wp_nonce_url(
-					add_query_arg(
-						array(
-							'action' => 'presence_scene',
-							'do'     => $running ? 'cut' : 'start',
-							'scene'  => $name,
+		if ( is_array( $run ) && ! $running ) {
+			$wp_admin_bar->add_node(
+				array(
+					'parent' => 'presence-debug-scenes',
+					'id'     => 'presence-debug-scene-' . $slug . '-action',
+					/* translators: %s: Label of the running scene. */
+					'title'  => '<span class="presence-debug-scene-icon" aria-hidden="true"></span><span>' . esc_html( sprintf( __( 'Waiting for "%s" to finish', 'presence-api' ), $run['label'] ) ) . '</span>',
+					'meta'   => array( 'class' => 'presence-debug-scene-wait ' . $hidden ),
+				)
+			);
+		} else {
+			$wp_admin_bar->add_node(
+				array(
+					'parent' => 'presence-debug-scenes',
+					'id'     => 'presence-debug-scene-' . $slug . '-action',
+					'title'  => '<span class="presence-debug-scene-icon" aria-hidden="true"></span><span>' . esc_html( $running ? __( 'Stop scene', 'presence-api' ) : ( $result ? __( 'Run again', 'presence-api' ) : __( 'Run scene', 'presence-api' ) ) ) . '</span>'
+						. ( $running ? '' : '<span class="presence-debug-scene-plan" hidden>' . esc_html( $plan ) . '</span>' ),
+					'href'   => wp_nonce_url(
+						add_query_arg(
+							array(
+								'action' => 'presence_scene',
+								'do'     => $running ? 'cut' : 'start',
+								'scene'  => $name,
+							),
+							admin_url( 'admin-post.php' )
 						),
-						admin_url( 'admin-post.php' )
+						'wp_presence_scene'
 					),
-					'wp_presence_scene'
-				),
-				'meta'   => array( 'class' => 'presence-debug-scene-' . ( $running ? 'cut' : 'start' ) . ' ' . $hidden ),
-			)
-		);
+					'meta'   => array( 'class' => 'presence-debug-scene-' . ( $running ? 'cut' : 'start' ) . ' ' . $hidden ),
+				)
+			);
+		}
 
 		if ( $result && ! $running ) {
 			$wp_admin_bar->add_node(
@@ -1038,7 +1054,8 @@ function wp_presence_scene_assets() {
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-start .presence-debug-scene-icon::before { content: "\\f522"; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-clear .presence-debug-scene-icon::before { content: "\\f335"; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-cut .presence-debug-scene-icon::before { content: ""; width: 10px; height: 10px; margin-inline: 3px 11px; background: currentColor; }
-		#wpadminbar #wp-admin-bar-presence-debug-scenes :is(.presence-debug-step, .presence-debug-scene-start, .presence-debug-scene-cut, .presence-debug-scene-clear) > .ab-item { padding-inline-start: 34px; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-wait .presence-debug-scene-icon::before { content: "\\f469"; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes :is(.presence-debug-step, .presence-debug-scene-wait, .presence-debug-scene-start, .presence-debug-scene-cut, .presence-debug-scene-clear) > .ab-item { padding-inline-start: 34px; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-step > .ab-item { min-height: 22px; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-step > .ab-item, #wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-step > .ab-item * { white-space: nowrap; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-cast > .ab-item > span:last-child { max-width: 360px; white-space: normal; line-height: 1.5; }
