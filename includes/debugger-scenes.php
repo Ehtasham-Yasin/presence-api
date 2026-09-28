@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  *     Scene arguments.
  *
  *     @type string $label    Button label.
- *     @type array  $cast     One to five parts, each `array( 'role' => 'author' )`, cast in order as Alice, Bob, Carol, Dave and Erin.
+ *     @type array  $cast     One to five parts, each `array( 'role' => 'author' )`, cast in order as Actor 1 to Actor 5.
  *     @type array  $cues     Each `array( 'after' => seconds, 'label' => string, 'callback' => callable )`. The callback receives the cast as WP_Presence_Scene_Actor objects.
  *     @type int    $duration Optional. Seconds before the strike. Default five after the last cue.
  * }
@@ -171,16 +171,15 @@ function wp_presence_scene_start( $name ) {
 		'notes'   => array(),
 	);
 
-	$names = array( 'Alice', 'Bob', 'Carol', 'Dave', 'Erin' );
 	foreach ( array_values( $scene['cast'] ) as $i => $part ) {
-		$login   = strtolower( $names[ $i ] ) . $number;
+		$login   = 'actor' . ( $i + 1 ) . 'run' . $number;
 		$user_id = wp_insert_user(
 			array(
 				'user_login'   => $login,
 				'user_email'   => $login . '@example.com',
 				'user_pass'    => wp_generate_password( 24 ),
-				'display_name' => $names[ $i ],
-				'first_name'   => $names[ $i ],
+				'display_name' => wp_presence_scene_actor_name( $i ),
+				'first_name'   => wp_presence_scene_actor_name( $i ),
 				'role'         => $part['role'] ?? 'author',
 				'meta_input'   => array( '_wp_presence_scene' => $run['expires'] ),
 			)
@@ -483,29 +482,59 @@ function wp_presence_scene_heartbeat_received( $response, $data ) {
 }
 
 /**
- * Describes who a scene creates, such as "Create Alice and Bob (Editor)".
+ * Names the actor cast in a scene's part, such as "Actor 1".
+ *
+ * @since 0.12.0
+ *
+ * @param int $i Zero-based index of the part.
+ * @return string
+ */
+function wp_presence_scene_actor_name( $i ) {
+	/* translators: %d: Actor number. */
+	return sprintf( __( 'Actor %d', 'presence-api' ), $i + 1 );
+}
+
+/**
+ * Narrates the users a scene creates, such as "Actor 1 and Actor 2 are cast as Editor".
  *
  * @since 0.12.0
  *
  * @param array $scene A registered scene.
  * @return string
  */
-function wp_presence_scene_cast_summary( array $scene ) {
-	$names = array( 'Alice', 'Bob', 'Carol', 'Dave', 'Erin' );
-	$roles = array();
+function wp_presence_scene_casting( array $scene ) {
+	$role_names = wp_roles()->role_names;
+	$roles      = array();
 	foreach ( array_values( $scene['cast'] ) as $i => $part ) {
-		$roles[ $part['role'] ?? 'author' ][] = $names[ $i ];
+		$roles[ $part['role'] ?? 'author' ][] = wp_presence_scene_actor_name( $i );
 	}
 
 	$parts = array();
 	foreach ( $roles as $role => $people ) {
-		$role_names = wp_roles()->role_names;
-		/* translators: 1: Names, 2: Role. */
-		$parts[] = sprintf( __( '%1$s (%2$s)', 'presence-api' ), wp_sprintf( '%l', $people ), translate_user_role( $role_names[ $role ] ?? $role ) );
+		$role    = translate_user_role( $role_names[ $role ] ?? $role );
+		$parts[] = $parts
+			/* translators: 1: Names, 2: Role. */
+			? sprintf( __( '%1$s as %2$s', 'presence-api' ), wp_sprintf( '%l', $people ), $role )
+			/* translators: 1: Names, 2: Role. */
+			: sprintf( _n( '%1$s is cast as %2$s', '%1$s are cast as %2$s', count( $people ), 'presence-api' ), wp_sprintf( '%l', $people ), $role );
 	}
 
-	/* translators: %s: Names and roles of the users a scene creates. */
-	return sprintf( __( 'Create %s', 'presence-api' ), implode( ', ', $parts ) );
+	return implode( ', ', $parts );
+}
+
+/**
+ * Narrates the cleanup after a scene, such as "The cast exits and is deleted with their posts".
+ *
+ * @since 0.12.0
+ *
+ * @param array $scene A registered scene.
+ * @return string
+ */
+function wp_presence_scene_exit( array $scene ) {
+	return 1 === count( $scene['cast'] )
+		/* translators: %s: Actor name. */
+		? sprintf( __( '%s exits and is deleted with their posts', 'presence-api' ), wp_presence_scene_actor_name( 0 ) )
+		: __( 'The cast exits and is deleted with their posts', 'presence-api' );
 }
 
 /**
@@ -577,7 +606,7 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 
 		$steps = array(
 			array(
-				'label' => wp_presence_scene_cast_summary( $scene ),
+				'label' => wp_presence_scene_casting( $scene ),
 				'after' => null,
 				'state' => $result ? 'pass' : 'pending',
 			),
@@ -590,7 +619,7 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 			);
 		}
 		$steps[] = array(
-			'label' => __( 'Delete them and their posts', 'presence-api' ),
+			'label' => wp_presence_scene_exit( $scene ),
 			'after' => $scene['duration'],
 			'state' => isset( $result['cleaned'] ) && ! $running ? ( $result['cleaned'] ? 'pass' : 'fail' ) : 'pending',
 		);
@@ -621,18 +650,18 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 		}
 
 		/* translators: %s: Scene label. */
-		$plan = sprintf( __( 'Start "%s"?', 'presence-api' ), $scene['label'] ) . "\n\n"
-			/* translators: 1: Who the scene creates, such as "Create Alice (Author)", 2: Duration in seconds. */
-			. sprintf( __( '%1$s for %2$ss, then delete them and their posts.', 'presence-api' ), wp_presence_scene_cast_summary( $scene ), $scene['duration'] );
+		$plan = sprintf( __( 'Curtain up on "%s"?', 'presence-api' ), $scene['label'] ) . "\n\n"
+			/* translators: 1: Who is cast, 2: Duration in seconds, 3: Who exits. */
+			. sprintf( __( '%1$s. After %2$ss: %3$s.', 'presence-api' ), wp_presence_scene_casting( $scene ), $scene['duration'], wp_presence_scene_exit( $scene ) );
 
 		$wp_admin_bar->add_node(
 			array(
 				'parent' => 'presence-debug-scenes',
 				'id'     => 'presence-debug-scene-' . $slug . '-action',
-				'title'  => '<span class="presence-debug-scene-icon" aria-hidden="true"></span><span>' . esc_html( $running ? __( 'Cut', 'presence-api' ) : __( 'Start', 'presence-api' ) ) . '</span>'
+				'title'  => '<span class="presence-debug-scene-icon" aria-hidden="true"></span><span>' . esc_html( $running ? __( 'Curtain down', 'presence-api' ) : __( 'Curtain up', 'presence-api' ) ) . '</span>'
 					. ( $running ? '' : '<span class="presence-debug-value">'
-						/* translators: 1: Number of users, 2: Duration in seconds. */
-						. esc_html( sprintf( _n( '%1$s user, %2$ss', '%1$s users, %2$ss', count( $scene['cast'] ), 'presence-api' ), number_format_i18n( count( $scene['cast'] ) ), $scene['duration'] ) )
+						/* translators: 1: Number of actors, 2: Duration in seconds. */
+						. esc_html( sprintf( _n( '%1$s actor, %2$ss', '%1$s actors, %2$ss', count( $scene['cast'] ), 'presence-api' ), number_format_i18n( count( $scene['cast'] ) ), $scene['duration'] ) )
 						. '</span><span class="presence-debug-scene-plan" hidden>' . esc_html( $plan ) . '</span>' ),
 				'href'   => wp_nonce_url(
 					add_query_arg(
@@ -763,7 +792,7 @@ function wp_presence_register_default_scenes() {
 			'cues'  => array(
 				array(
 					'after'    => 0,
-					'label'    => __( 'Alice and Bob arrive', 'presence-api' ),
+					'label'    => __( 'Actor 1 and Actor 2 enter', 'presence-api' ),
 					'callback' => function ( $cast ) {
 						$cast[0]->enter( 'dashboard' );
 						$cast[1]->enter( 'dashboard' );
@@ -771,37 +800,37 @@ function wp_presence_register_default_scenes() {
 				),
 				array(
 					'after'    => 5,
-					'label'    => __( 'Alice opens a draft', 'presence-api' ),
+					'label'    => __( 'Actor 1 opens a draft', 'presence-api' ),
 					'callback' => function ( $cast ) {
 						$cast[0]->open( $cast[0]->write( __( 'Quarterly budget', 'presence-api' ) ) );
 					},
 				),
 				array(
 					'after'    => 20,
-					'label'    => __( 'Bob opens it and finds it locked', 'presence-api' ),
+					'label'    => __( 'Actor 2 opens it and finds it locked', 'presence-api' ),
 					'callback' => function ( $cast ) {
 						$cast[1]->open( $cast[0]->post() );
-						wp_presence_scene_expect( $cast[1]->sees_lock( $cast[0]->post() ) === $cast[0]->ID, __( 'Bob does not see Alice holding the lock.', 'presence-api' ) );
+						wp_presence_scene_expect( $cast[1]->sees_lock( $cast[0]->post() ) === $cast[0]->ID, __( 'Actor 2 does not see Actor 1 holding the lock.', 'presence-api' ) );
 					},
 				),
 				array(
 					'after'    => 35,
-					'label'    => __( 'Bob takes over', 'presence-api' ),
+					'label'    => __( 'Actor 2 takes over', 'presence-api' ),
 					'callback' => function ( $cast ) {
 						$cast[1]->take_over( $cast[0]->post() );
-						wp_presence_scene_expect( $cast[0]->sees_lock( $cast[0]->post() ) === $cast[1]->ID, __( 'Alice does not see Bob holding the lock.', 'presence-api' ) );
+						wp_presence_scene_expect( $cast[0]->sees_lock( $cast[0]->post() ) === $cast[1]->ID, __( 'Actor 1 does not see Actor 2 holding the lock.', 'presence-api' ) );
 					},
 				),
 				array(
 					'after'    => 45,
-					'label'    => __( 'Bob saves a revision', 'presence-api' ),
+					'label'    => __( 'Actor 2 saves a revision', 'presence-api' ),
 					'callback' => function ( $cast ) {
 						$cast[1]->type( $cast[0]->post(), __( 'Moved the travel line into operations.', 'presence-api' ) );
 					},
 				),
 				array(
 					'after'    => 60,
-					'label'    => __( 'Alice and Bob log out', 'presence-api' ),
+					'label'    => __( 'Actor 1 and Actor 2 log out', 'presence-api' ),
 					'callback' => function ( $cast ) {
 						$cast[0]->leave();
 						$cast[1]->leave();
@@ -814,16 +843,16 @@ function wp_presence_register_default_scenes() {
 	$team     = array(
 		array(
 			'after'    => 0,
-			'label'    => __( 'Alice arrives', 'presence-api' ),
+			'label'    => __( 'Actor 1 enters', 'presence-api' ),
 			'callback' => function ( $cast ) {
 				$cast[0]->enter( 'dashboard' );
 			},
 		),
 	);
 	$arrivals = array(
-		__( 'Bob arrives', 'presence-api' ),
-		__( 'Carol arrives', 'presence-api' ),
-		__( 'Dave arrives', 'presence-api' ),
+		__( 'Actor 2 enters', 'presence-api' ),
+		__( 'Actor 3 enters', 'presence-api' ),
+		__( 'Actor 4 enters', 'presence-api' ),
 	);
 	foreach ( $arrivals as $i => $label ) {
 		$team[] = array(
@@ -835,16 +864,16 @@ function wp_presence_register_default_scenes() {
 		);
 	}
 	$titles = array(
-		'Alice' => __( 'Launch checklist', 'presence-api' ),
-		'Bob'   => __( 'Interview questions', 'presence-api' ),
-		'Carol' => __( 'Style guide updates', 'presence-api' ),
-		'Dave'  => __( 'Weekly roundup', 'presence-api' ),
+		__( 'Launch checklist', 'presence-api' ),
+		__( 'Interview questions', 'presence-api' ),
+		__( 'Style guide updates', 'presence-api' ),
+		__( 'Weekly roundup', 'presence-api' ),
 	);
-	foreach ( array_values( $titles ) as $i => $title ) {
+	foreach ( $titles as $i => $title ) {
 		$team[] = array(
 			'after'    => 30 + 6 * $i,
 			/* translators: 1: Actor name, 2: Post title. */
-			'label'    => sprintf( __( '%1$s opens "%2$s"', 'presence-api' ), array_keys( $titles )[ $i ], $title ),
+			'label'    => sprintf( __( '%1$s opens "%2$s"', 'presence-api' ), wp_presence_scene_actor_name( $i ), $title ),
 			'callback' => function ( $cast ) use ( $i, $title ) {
 				$cast[ $i ]->open( $cast[ $i ]->write( $title ) );
 			},
@@ -852,7 +881,7 @@ function wp_presence_register_default_scenes() {
 	}
 	$team[] = array(
 		'after'    => 75,
-		'label'    => __( 'Everyone logs out', 'presence-api' ),
+		'label'    => __( 'The cast logs out', 'presence-api' ),
 		'callback' => function ( $cast ) {
 			foreach ( $cast as $actor ) {
 				$actor->leave();
@@ -878,30 +907,30 @@ function wp_presence_register_default_scenes() {
 			'cues'  => array(
 				array(
 					'after'    => 0,
-					'label'    => __( 'Alice arrives', 'presence-api' ),
+					'label'    => __( 'Actor 1 enters', 'presence-api' ),
 					'callback' => function ( $cast ) {
 						$cast[0]->enter( 'dashboard' );
 					},
 				),
 				array(
 					'after'    => 5,
-					'label'    => __( 'Alice opens a draft', 'presence-api' ),
+					'label'    => __( 'Actor 1 opens a draft', 'presence-api' ),
 					'callback' => function ( $cast ) {
 						$cast[0]->open( $cast[0]->write( __( 'Field notes', 'presence-api' ) ) );
 					},
 				),
 				array(
 					'after'    => 25,
-					'label'    => __( 'Alice loses connection', 'presence-api' ),
+					'label'    => __( 'Actor 1 loses connection', 'presence-api' ),
 					'callback' => function ( $cast ) {
 						$cast[0]->drop();
 					},
 				),
 				array(
 					'after'    => $aged_out,
-					'label'    => __( 'Alice ages out', 'presence-api' ),
+					'label'    => __( 'Actor 1 ages out', 'presence-api' ),
 					'callback' => function ( $cast ) {
-						wp_presence_scene_expect( ! $cast[0]->is_present(), __( 'Alice is still listed online after her rows expired.', 'presence-api' ) );
+						wp_presence_scene_expect( ! $cast[0]->is_present(), __( 'Actor 1 is still listed online after their rows expired.', 'presence-api' ) );
 					},
 				),
 			),
