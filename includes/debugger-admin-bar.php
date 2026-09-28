@@ -35,6 +35,15 @@ function wp_presence_debugger_admin_bar_node( $wp_admin_bar ) {
 		)
 	);
 
+	/**
+	 * Fires at the top of the debugger menu, for controls such as the scene buttons.
+	 *
+	 * @since 0.12.0
+	 *
+	 * @param WP_Admin_Bar $wp_admin_bar The admin bar instance.
+	 */
+	do_action( 'wp_presence_debugger_menu', $wp_admin_bar );
+
 	$rows = array(
 		'interval' => __( 'Interval', 'presence-api' ),
 		'ttl'      => __( 'TTL', 'presence-api' ),
@@ -110,15 +119,6 @@ function wp_presence_debugger_admin_bar_node( $wp_admin_bar ) {
 			);
 		}
 	}
-
-	/**
-	 * Fires after the debugger's rooms, for more debugger groups.
-	 *
-	 * @since 0.12.0
-	 *
-	 * @param WP_Admin_Bar $wp_admin_bar The admin bar instance.
-	 */
-	do_action( 'wp_presence_debugger_menu', $wp_admin_bar );
 
 	if ( file_exists( __DIR__ . '/db-viewer.php' ) ) {
 		$wp_admin_bar->add_group(
