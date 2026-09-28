@@ -137,35 +137,18 @@ function wp_presence_debugger_admin_bar_node( $wp_admin_bar ) {
  *
  * @since 0.12.0
  *
- * @return string The node's list item markup.
+ * @return string A toolbar holding only the debugger node.
  */
 function wp_presence_debugger_admin_bar_markup() {
 	require_once ABSPATH . 'wp-includes/class-wp-admin-bar.php';
 
-	$bar = new class() extends WP_Admin_Bar {
-		/**
-		 * Renders one top-level node.
-		 *
-		 * @since 0.12.0
-		 *
-		 * @param string $id Node ID.
-		 * @return string The node's list item markup.
-		 */
-		public function render_node( $id ) {
-			$node = $this->_get_node( $id );
-			if ( ! $node ) {
-				return '';
-			}
-			$this->_bind();
-			ob_start();
-			$this->_render_item( $node );
-			return (string) ob_get_clean();
-		}
-	};
-
+	$bar = new WP_Admin_Bar();
+	$bar->add_group( array( 'id' => 'top-secondary' ) );
 	wp_presence_debugger_admin_bar_node( $bar );
 
-	return $bar->render_node( 'presence-debug' );
+	ob_start();
+	$bar->render();
+	return (string) ob_get_clean();
 }
 
 /**
