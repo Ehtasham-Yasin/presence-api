@@ -214,6 +214,7 @@ function wp_presence_debugger_admin_bar_assets() {
 		@keyframes presence-debug-heart { 0% { transform: scale(1); } 5% { transform: scale(1.45); } 14% { transform: scale(0.92); } 22% { transform: scale(1.3); } 32% { transform: scale(0.97); } 42%, 100% { transform: scale(1); } }
 		#wpadminbar #wp-admin-bar-presence-debug > .ab-sub-wrapper { min-width: 320px; max-height: calc(100vh - 64px); overflow-y: auto; }
 		#wpadminbar #wp-admin-bar-presence-debug.is-pinned > .ab-sub-wrapper { display: block; }
+		#wpadminbar #wp-admin-bar-presence-debug.is-pinned { position: relative; z-index: 1; }
 		#wpadminbar #wp-admin-bar-presence-debug .ab-submenu .ab-item { display: flex; align-items: center; min-height: 26px; }
 		#wpadminbar #wp-admin-bar-presence-debug .ab-submenu .ab-item, #wpadminbar #wp-admin-bar-presence-debug .ab-submenu .ab-item > * { line-height: 1.4; }
 		#wp-admin-bar-presence-debug .presence-debug-row > .ab-item { gap: 16px; cursor: default; }
@@ -300,7 +301,7 @@ function wp_presence_debugger_admin_bar_assets() {
 				if ( ! menu ) {
 					return;
 				}
-				menu.style.right = "";
+				node.style.transform = "";
 				if ( ! node.classList.contains( "is-pinned" ) ) {
 					return;
 				}
@@ -311,7 +312,7 @@ function wp_presence_debugger_admin_bar_assets() {
 				const mine = menu.getBoundingClientRect();
 				const theirs = open.getBoundingClientRect();
 				if ( mine.right > theirs.left && mine.left < theirs.right ) {
-					menu.style.right = ( mine.right - theirs.left + 8 ) + "px";
+					node.style.transform = "translateX(" + ( theirs.left - mine.right ) + "px)";
 				}
 			}
 			new MutationObserver( function () {
