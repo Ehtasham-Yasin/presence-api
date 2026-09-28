@@ -98,7 +98,7 @@ function wp_presence_debugger_admin_bar_node( $wp_admin_bar ) {
 		}
 	}
 
-	if ( file_exists( WP_PRESENCE_PLUGIN_DIR . 'includes/db-viewer.php' ) ) {
+	if ( file_exists( __DIR__ . '/db-viewer.php' ) ) {
 		$wp_admin_bar->add_group(
 			array(
 				'parent' => 'presence-debug',
