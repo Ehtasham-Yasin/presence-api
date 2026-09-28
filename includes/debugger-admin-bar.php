@@ -85,7 +85,8 @@ function wp_presence_debugger_admin_bar_node( $wp_admin_bar ) {
 		);
 
 		// Reserved rows included, since the plugin's own bookkeeping is part of what is being debugged.
-		$rows = wp_presence_room_rows( $room );
+		$rows   = wp_presence_room_rows( $room );
+		$shared = count( array_unique( wp_list_pluck( $rows, 'user_id' ) ) ) > 1;
 		foreach ( array_slice( $rows, 0, 20 ) as $j => $row ) {
 			$user = get_userdata( (int) $row->user_id );
 			$age  = max( 0, time() - (int) strtotime( $row->date_gmt . ' UTC' ) );
@@ -93,7 +94,7 @@ function wp_presence_debugger_admin_bar_node( $wp_admin_bar ) {
 				array(
 					'parent' => 'presence-debug-rooms',
 					'id'     => $group . '-' . $j,
-					'title'  => '<span><span class="presence-debug-color" style="background:' . esc_attr( wp_presence_entry_color( $row ) ) . '" aria-hidden="true"></span>' . esc_html( $user ? $user->display_name : '#' . $row->user_id ) . ' <code>' . esc_html( $row->client_id ) . '</code></span><span class="presence-debug-value" data-presence-debug-age="' . esc_attr( $age ) . '"></span>',
+					'title'  => '<span>' . ( $shared ? '<span class="presence-debug-color" style="background:' . esc_attr( wp_presence_entry_color( $row ) ) . '" aria-hidden="true"></span>' : '' ) . esc_html( $user ? $user->display_name : '#' . $row->user_id ) . ' <code>' . esc_html( $row->client_id ) . '</code></span><span class="presence-debug-value" data-presence-debug-age="' . esc_attr( $age ) . '"></span>',
 					'meta'   => array( 'class' => 'presence-debug-row' ),
 				)
 			);
