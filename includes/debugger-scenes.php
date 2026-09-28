@@ -885,14 +885,15 @@ function wp_presence_scene_admin_bar_nodes( $wp_admin_bar ) {
 		array(
 			'parent' => 'presence-debug',
 			'id'     => 'presence-debug-scenes',
-			'meta'   => array( 'class' => 'ab-sub-secondary' ),
+			'meta'   => array( 'class' => 'ab-sub-secondary' . ( empty( $_COOKIE['wp_presence_scenes_shown'] ) ? '' : ' is-shown' ) ),
 		)
 	);
 	$wp_admin_bar->add_node(
 		array(
 			'parent' => 'presence-debug-scenes',
 			'id'     => 'presence-debug-scenes-heading',
-			'title'  => esc_html__( 'Scenes', 'presence-api' ),
+			'title'  => '<span class="presence-debug-scene-icon" aria-hidden="true"></span><span>' . esc_html__( 'Scenes', 'presence-api' ) . '</span>',
+			'href'   => '#',
 			'meta'   => array(
 				'class' => 'presence-debug-scenes-heading',
 				'html'  => is_array( $run ) ? '<a class="presence-debug-scene-button is-follow" href="#" role="button" aria-pressed="' . ( empty( $_COOKIE['wp_presence_scene_follow'] ) ? 'false' : 'true' ) . '" title="' . esc_attr__( 'Follow along', 'presence-api' ) . '"><span class="screen-reader-text">' . esc_html__( 'Follow along', 'presence-api' ) . '</span></a>' : '',
@@ -1008,10 +1009,11 @@ function wp_presence_scene_assets() {
 		'#wpadminbar #wp-admin-bar-presence-debug > .ab-sub-wrapper { color-scheme: dark; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes { padding-block: 6px; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .is-hidden { display: none; }
-		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scenes-heading > .ab-item { font-weight: 600; cursor: default; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scenes-heading > .ab-item { display: flex; align-items: center; font-weight: 600; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes:not(.is-shown) > :not(.presence-debug-scenes-heading) { display: none; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-icon::before, #wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-step-mark::before { display: block; width: 16px; margin-inline-end: 8px; font: 16px/1 dashicons; }
-		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene .presence-debug-scene-icon::before { content: "\\f345"; }
-		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene.is-open .presence-debug-scene-icon::before { content: "\\f347"; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene-icon::before { content: "\\f345"; }
+		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scene.is-open .presence-debug-scene-icon::before, #wpadminbar #wp-admin-bar-presence-debug-scenes.is-shown .presence-debug-scenes-heading .presence-debug-scene-icon::before { content: "\\f347"; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes :is(.presence-debug-scene, .presence-debug-scenes-heading) { display: flex; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scenes-heading > .ab-item { flex: 1; }
 		#wpadminbar #wp-admin-bar-presence-debug-scenes .presence-debug-scenes-heading .presence-debug-scene-button { justify-content: flex-end; width: auto; padding-inline: 8px 10px; opacity: 1; }
@@ -1071,6 +1073,15 @@ function wp_presence_scene_assets() {
 			} );
 		} );
 		// Live updates skip a focused menu, so a click must not leave focus behind.
+		if ( event.detail ) {
+			this.blur();
+		}
+	} );
+
+	$( document ).on( "click", "#wp-admin-bar-presence-debug-scenes .presence-debug-scenes-heading > .ab-item", function ( event ) {
+		event.preventDefault();
+		const shown = document.getElementById( "wp-admin-bar-presence-debug-scenes" ).classList.toggle( "is-shown" );
+		document.cookie = "wp_presence_scenes_shown=" + ( shown ? "1" : "" ) + "; path=/; SameSite=Lax";
 		if ( event.detail ) {
 			this.blur();
 		}
