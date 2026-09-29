@@ -32,17 +32,19 @@ add_action(
 		$rows = array();
 
 		if ( wp_presence_has_table() ) {
-			// No user input in this query; table name comes from $wpdb->presence (controlled).
+			$room = isset( $_GET['room'] ) ? sanitize_text_field( wp_unslash( $_GET['room'] ) ) : '';
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$rows = $wpdb->get_results(
-				"SELECT room, user_id, data, date_gmt FROM {$wpdb->presence} ORDER BY date_gmt DESC"
+				$wpdb->prepare(
+					"SELECT room, user_id, data, date_gmt FROM {$wpdb->presence} WHERE %s = '' OR room = %s ORDER BY date_gmt DESC",
+					$room,
+					$room
+				)
 			);
 		}
 
-		$ttl         = wp_presence_get_timeout();
-		$now_ms      = (int) ( microtime( true ) * 1000 );
-		$max_visible = 10;
-		$is_embedded = isset( $_SERVER['HTTP_SEC_FETCH_DEST'] ) && 'iframe' === $_SERVER['HTTP_SEC_FETCH_DEST'];
+		$ttl    = wp_presence_get_timeout();
+		$now_ms = (int) ( microtime( true ) * 1000 );
 
 		header( 'Content-Type: text/html; charset=utf-8' );
 		header( 'Cache-Control: no-store' );
@@ -56,7 +58,6 @@ add_action(
 <style>
 	* { margin: 0; padding: 0; box-sizing: border-box; }
 	body { font: 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif; background: var(--wp-admin-background, #fff); color: var(--wp-admin-text, #50575e); padding: 0; overflow: auto; }
-	body.is-embedded { overflow: hidden; }
 
 	table { border-collapse: collapse; width: 100%; table-layout: fixed; }
 	th { text-align: left; padding: 4px 6px; color: var(--wp-admin-muted, #646970); font-size: 10px; text-transform: uppercase; letter-spacing: 0.3px; border-bottom: 1px solid var(--wp-admin-border, #f0f0f1); }
@@ -72,10 +73,12 @@ add_action(
 	tr.is-fresh td { color: var(--wp-admin-text-dark, #1d2327); }
 	tr.is-stale td { color: var(--wp-admin-muted, #646970); }
 
+	.swatch { display: inline-block; width: 8px; height: 8px; margin-inline-end: 4px; border-radius: 50%; }
+
 	.empty { color: var(--wp-admin-muted, #646970); padding: 12px 6px; }
 </style>
 </head>
-<body<?php echo $is_embedded ? ' class="is-embedded"' : ''; ?>>
+<body>
 
 <p class="empty"<?php echo ! empty( $rows ) ? ' style="display:none"' : ''; ?>><?php esc_html_e( 'No entries.', 'presence-api' ); ?></p>
 		<?php if ( ! empty( $rows ) ) : ?>
@@ -85,11 +88,7 @@ add_action(
 </thead>
 <tbody>
 			<?php
-			$row_limit = $is_embedded ? $max_visible : count( $rows );
-			foreach ( $rows as $i => $row ) :
-				if ( $i >= $row_limit ) {
-					break;
-				}
+			foreach ( $rows as $row ) :
 				$ts_ms = (int) ( strtotime( $row->date_gmt . ' +0000' ) * 1000 );
 				?>
 <tr data-ts="<?php echo esc_attr( $ts_ms ); ?>">
@@ -99,9 +98,13 @@ add_action(
 				<?php
 				$decoded = json_decode( $row->data, true );
 				if ( is_array( $decoded ) ) {
+					if ( ! current_user_can( 'view_presence_location', (int) $row->user_id ) ) {
+						unset( $decoded['screen'], $decoded['post_id'], $decoded['object_id'] );
+					}
 					$pairs = array();
 					foreach ( $decoded as $k => $v ) {
-							$pairs[] = esc_html( $k ) . ': ' . esc_html( $v );
+							$swatch  = 'color' === $k && is_string( $v ) && sanitize_hex_color( $v ) ? '<span class="swatch" style="background:' . esc_attr( $v ) . '"></span>' : '';
+							$pairs[] = esc_html( $k ) . ': ' . $swatch . esc_html( $v );
 					}
 					echo implode( ', ', $pairs ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Each pair is escaped individually above.
 				} else {
@@ -114,13 +117,6 @@ add_action(
 	<?php endforeach; ?>
 </tbody>
 </table>
-			<?php if ( $is_embedded ) : ?>
-<p class="overflow-link" style="padding:6px;font-size:11px;color:#646970;text-align:center;display:none;">
-	<a href="<?php echo esc_url( wp_nonce_url( home_url( '/?presence-db=1' ), 'wp_presence_db_viewer' ) ); ?>" target="_blank" rel="noopener noreferrer" style="color:var(--wp-admin-muted, #646970);text-decoration:none;">
-		<span class="overflow-count"></span> &#8599;
-	</a>
-</p>
-	<?php endif; ?>
 	<?php endif; ?>
 
 <script>
@@ -128,15 +124,6 @@ add_action(
 	var serverNow = <?php echo (int) $now_ms; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Integer cast. ?>;
 	var offset = serverNow - Date.now();
 	var TTL = <?php echo (int) $ttl; ?>;
-	var allTimestamps = 
-		<?php
-		$all_ts = array();
-		foreach ( $rows as $row ) {
-			$all_ts[] = (int) ( strtotime( $row->date_gmt . ' +0000' ) * 1000 );
-		}
-		echo wp_json_encode( $all_ts );
-		?>
-	;
 	function tick(){
 		var now = Date.now() + offset;
 		var visible = 0;
@@ -155,28 +142,22 @@ add_action(
 		});
 		var table = document.querySelector('table');
 		var empty = document.querySelector('.empty');
-		var overflowEl = document.querySelector('.overflow-link');
-		var overflowCount = document.querySelector('.overflow-count');
 		if (table) table.style.display = visible ? '' : 'none';
 		if (empty) empty.style.display = visible ? 'none' : '';
-		if (overflowEl && overflowCount) {
-			var maxVisible = <?php echo (int) $max_visible; ?>;
-			var totalAlive = allTimestamps.filter(function(ts) {
-				return Math.round((now - ts) / 1000) < TTL;
-			}).length;
-			var extra = Math.max(0, totalAlive - maxVisible);
-			overflowEl.style.display = extra > 0 ? '' : 'none';
-			overflowCount.textContent = '+' + extra + ' more rows';
-		}
-	}
-	function resize() {
-		if (window.parent !== window) {
-			window.parent.postMessage({ presenceDbHeight: document.body.scrollHeight }, window.location.origin);
-		}
 	}
 	tick();
-	resize();
-	setInterval(function() { tick(); resize(); }, 1000);
+	setInterval(tick, 1000);
+	// Refreshes itself, since the tab that opened it may have moved on.
+	setInterval(function(){
+		fetch(location.href, { cache: 'no-store' }).then(function(response){
+			return response.ok ? response.text() : Promise.reject();
+		}).then(function(html){
+			var next = new DOMParser().parseFromString(html, 'text/html');
+			next.querySelectorAll('script').forEach(function(script){ script.remove(); });
+			document.body.replaceChildren.apply(document.body, Array.from(next.body.childNodes));
+			tick();
+		}).catch(function(){});
+	}, 5000);
 })();
 </script>
 </body>
