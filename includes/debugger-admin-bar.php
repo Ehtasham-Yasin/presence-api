@@ -157,13 +157,19 @@ function wp_presence_debugger_admin_bar_node( $wp_admin_bar ) {
 				)
 			);
 		}
-		if ( count( $rows ) > 20 ) {
+		$overflow = count( $rows ) - 20;
+		if ( $overflow > 0 ) {
 			$wp_admin_bar->add_node(
 				array(
 					'parent' => 'presence-debug-rooms',
 					'id'     => $group . '-more',
-					/* translators: %s: Number of clients not listed. */
-					'title'  => esc_html( sprintf( __( '+%s more', 'presence-api' ), number_format_i18n( count( $rows ) - 20 ) ) ),
+					'title'  => esc_html(
+						sprintf(
+							/* translators: %s: Number of clients not listed. */
+							_n( '+%s more', '+%s more', $overflow, 'presence-api' ),
+							number_format_i18n( $overflow )
+						)
+					),
 					'meta'   => array( 'class' => 'presence-debug-more' ),
 				)
 			);
