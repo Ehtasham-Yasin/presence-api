@@ -178,7 +178,7 @@ function wp_maybe_create_presence_network_summary_table() {
 
 	$provisioned = (int) get_site_option( 'wp_presence_network_summary_db_version' ) === WP_PRESENCE_NETWORK_SUMMARY_DB_VERSION;
 
-	if ( $provisioned && ( wp_doing_ajax() || wp_presence_network_summary_table_exists() ) ) {
+	if ( $provisioned && ( wp_doing_ajax() || wp_presence_has_network_summary_table() ) ) {
 		return;
 	}
 

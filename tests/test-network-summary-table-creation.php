@@ -3,9 +3,8 @@
  * Tests for how the network-wide presence summary table is provisioned.
  *
  * One table for the whole network, so unlike the per-site presence table it is
- * created once at network activation and never again. That makes the recovery
- * paths -- a dropped table, a lock nobody released -- the only way it ever gets
- * rebuilt, which is what this file pins down.
+ * created once at network activation and never again. This file pins down its
+ * provisioning and lock recovery paths.
  *
  * @package Presence_API
  *
@@ -87,21 +86,38 @@ class WP_Test_Network_Summary_Table_Creation extends WP_Presence_UnitTestCase {
 	}
 
 	/**
-	 * The version option is a site option, so it outlives any single site's
-	 * table being dropped. Provisioning has to trust the database over the
-	 * option, otherwise the network summary stays dead until someone deletes
-	 * the option by hand.
+	 * Once the version option says provisioned, later requests trust it rather
+	 * than checking the table again. An externally dropped table therefore stays
+	 * missing until an explicit reprovisioning path runs.
 	 *
 	 * @covers ::wp_maybe_create_presence_network_summary_table
 	 * @covers ::wp_presence_network_summary_table_exists
 	 */
-	public function test_a_dropped_table_is_rebuilt_when_the_version_option_survives() {
+	public function test_a_dropped_table_is_not_rebuilt_when_the_version_option_survives() {
 		$this->drop_summary_table();
 		$this->claim_provisioned();
 
 		wp_maybe_create_presence_network_summary_table();
 
-		$this->assertTrue( wp_presence_network_summary_table_exists(), 'Provisioning should rebuild the missing table.' );
+		$this->assertFalse( wp_presence_network_summary_table_exists(), 'A provisioned request should trust the cached version.' );
+	}
+
+	/**
+	 * A normal provisioned request should trust the cached schema version.
+	 *
+	 * @covers ::wp_maybe_create_presence_network_summary_table
+	 * @covers ::wp_presence_has_network_summary_table
+	 */
+	public function test_a_provisioned_request_does_not_query_for_the_table_check() {
+		global $wpdb;
+
+		$this->claim_provisioned();
+		wp_presence_has_network_summary_table();
+
+		$before = $wpdb->num_queries;
+		wp_maybe_create_presence_network_summary_table();
+
+		$this->assertSame( $before, $wpdb->num_queries, 'A provisioned request should not query the database again.' );
 	}
 
 	/**
