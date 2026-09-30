@@ -1,0 +1,8 @@
+.distignore
+.wordpress-org
+tests
+src/hooks/test/
+src/utils/test/
+includes/db-viewer.php
+includes/debugger-admin-bar.php
+README.md

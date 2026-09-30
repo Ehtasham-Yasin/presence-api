@@ -11,6 +11,12 @@
 	},
 	"steps": [
 		{
+			"step": "defineWpConfigConsts",
+			"consts": {
+				"WP_DEBUG": true
+			}
+		},
+		{
 			"step": "installPlugin",
 			"pluginData": {
 				"resource": "wordpress.org/plugins",
@@ -22,10 +28,18 @@
 		},
 		{
 			"step": "writeFile",
+			"path": "/wordpress/wp-content/plugins/presence-api/includes/debugger-admin-bar.php",
+			"data": {
+				"resource": "url",
+				"url": "https://raw.githubusercontent.com/WordPress/presence-api/v0.12.1/plugins/presence-api/includes/debugger-admin-bar.php"
+			}
+		},
+		{
+			"step": "writeFile",
 			"path": "/wordpress/wp-content/plugins/presence-api/demo-seeder.php",
 			"data": {
 				"resource": "url",
-				"url": "https://raw.githubusercontent.com/WordPress/presence-api/v0.11.0/tests/e2e/demo-seeder.php"
+				"url": "https://raw.githubusercontent.com/WordPress/presence-api/v0.12.1/tests/e2e/demo-seeder.php"
 			}
 		},
 		{
@@ -33,7 +47,7 @@
 			"path": "/wordpress/wp-content/mu-plugins/screen-stale-demo-helper.php",
 			"data": {
 				"resource": "url",
-				"url": "https://raw.githubusercontent.com/WordPress/presence-api/v0.11.0/tests/e2e/screen-stale-demo-helper.php"
+				"url": "https://raw.githubusercontent.com/WordPress/presence-api/v0.12.1/tests/e2e/screen-stale-demo-helper.php"
 			}
 		},
 		{

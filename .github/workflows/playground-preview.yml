@@ -18,6 +18,7 @@ on:
       - '**.md'
       - '.github/**'
       - 'tests/**'
+      - 'plugins/presence-api/tests/**'
   workflow_dispatch:
 
 concurrency:
@@ -51,9 +52,10 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build/presence-api
-          rsync -a --exclude-from='.distignore' --exclude='build' ./ build/presence-api/
+          rsync -a --exclude-from='plugins/presence-api/.distignore' plugins/presence-api/ build/presence-api/
+          cp LICENSE build/presence-api/
           # Previews run with WP_DEBUG, so ship the debug-only tools that releases leave out.
-          cp includes/debugger-admin-bar.php includes/db-viewer.php build/presence-api/includes/
+          cp plugins/presence-api/includes/debugger-admin-bar.php plugins/presence-api/includes/db-viewer.php build/presence-api/includes/
           (cd build && zip -qr presence-api.zip presence-api/)
 
       # Cheap smoke test: parse every PHP file in the staged plugin and
@@ -84,7 +86,7 @@ jobs:
             fi
             jq -e '
               (.steps | length > 0)
-              and (.steps | all(.step | IN("installPlugin", "writeFile", "runPHP", "enableMultisite", "wp-cli")))
+              and (.steps | all(.step | IN("defineWpConfigConsts", "installPlugin", "writeFile", "runPHP", "enableMultisite", "wp-cli")))
               and (.steps | map(select(.step == "installPlugin" and (.pluginData.resource // "") == "url")) | length == 1)
               and (.steps | map(select(.step == "writeFile" and (.data.resource // "") == "url")) | length == 2)
             ' "$f" > /dev/null
