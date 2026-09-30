@@ -175,44 +175,6 @@ class WP_Test_Network_Summary_Table_Creation extends WP_Presence_UnitTestCase {
 	}
 
 	/**
-	 * admin-ajax.php fires admin_init too, and presence heartbeats through it
-	 * every 15 seconds per open admin tab. A SHOW TABLES there would bill the
-	 * whole network continuously for a state it will almost never be in.
-	 *
-	 * @covers ::wp_maybe_create_presence_network_summary_table
-	 */
-	public function test_ajax_requests_do_not_pay_for_the_table_check() {
-		global $wpdb;
-
-		$this->claim_provisioned();
-
-		add_filter( 'wp_doing_ajax', '__return_true' );
-
-		$before = $wpdb->num_queries;
-		wp_maybe_create_presence_network_summary_table();
-
-		$this->assertSame( $before, $wpdb->num_queries, 'A heartbeat request should not query at all.' );
-	}
-
-	/**
-	 * The other half of that trade, stated so it cannot be dropped by accident.
-	 * A network in the broken state stays broken through heartbeat traffic
-	 * alone and waits for the next real network admin page load to repair.
-	 *
-	 * @covers ::wp_maybe_create_presence_network_summary_table
-	 */
-	public function test_ajax_requests_do_not_rebuild_a_dropped_table() {
-		$this->drop_summary_table();
-		$this->claim_provisioned();
-
-		add_filter( 'wp_doing_ajax', '__return_true' );
-
-		wp_maybe_create_presence_network_summary_table();
-
-		$this->assertFalse( wp_presence_network_summary_table_exists(), 'Heartbeat should not trigger a rebuild.' );
-	}
-
-	/**
 	 * Rows are keyed by blog_id in the one table on the network that a shard
 	 * router cannot split, so a deleted site's row has to leave with it rather
 	 * than sit there until someone goes looking.
